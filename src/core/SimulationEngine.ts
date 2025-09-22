@@ -1,10 +1,10 @@
-import CPU from "./CPU";
+import OS from "./OS";
 
 /**
  * Класс SimulationEngine управляет временем выполнения процессов
  */
 export default class SimulationEngine {
-  cpu: CPU;
+  os: OS;
   intervalId: null | ReturnType<typeof setInterval>;
   speed: number;
   minSpeed: number;
@@ -13,8 +13,8 @@ export default class SimulationEngine {
   /**
    * @param cpu - объект CPU
    */
-  constructor(cpu: CPU) {
-    this.cpu = cpu;
+  constructor(os: OS) {
+    this.os = os;
     this.intervalId = null; // ID таймера
     this.speed = 2; // тактов в секунду (2 по умолчанию)
     this.minSpeed = 0.1;
@@ -29,7 +29,7 @@ export default class SimulationEngine {
 
     const interval = 1000 / this.speed; // миллисекунд между тактами
     this.intervalId = setInterval(() => {
-      this.cpu.tick();
+      this.os.tick();
     }, interval);
   }
 

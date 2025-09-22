@@ -1,6 +1,6 @@
 import readline from "readline";
-import OS from "./core/OS";
 import appConfig from "./config";
+import OS from "./core/OS";
 
 const os = new OS({
   totalMemory: appConfig.system.totalMemory,
@@ -23,6 +23,12 @@ const helpText = `
 /mem     — показать статистику памяти
 /exit    — выйти из программы
 /?       — показать эту справку
+
+Алгоритм планировщика: Относительные приоритеты
+- Каждый READY-процесс стареет: priority += agingStep (до maxPriority)
+- RUNNING получает штраф: priority -= runPenaltyStep (до minPriority)
+- Выбор: процесс с максимальным dynamicPriority
+- Квант: ${appConfig.scheduler.quantum} тактов; по исчерпании — возврат в READY
 `;
 
 console.log("OS Emulator (CLI mode)");

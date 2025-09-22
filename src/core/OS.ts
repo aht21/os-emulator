@@ -4,6 +4,8 @@ import MemoryManager from "./MemoryManager.js";
 import Process from "./Process.js";
 import ProcessTable from "./ProcessTable.js";
 import SimulationEngine from "./SimulationEngine.js";
+import Scheduler from "./Scheduler.js";
+import appConfig, { SchedulerConfig } from "../config.js";
 
 type Config = {
   maxProcesses: number;
@@ -17,15 +19,19 @@ export default class OS {
   simEngine: SimulationEngine;
   jobGenerator: JobGenerator;
   config: Config;
+  scheduler: Scheduler;
+  schedulerConfig: SchedulerConfig;
 
   constructor(config: Config) {
     this.memoryManager = new MemoryManager(config.totalMemory);
     this.processTable = new ProcessTable(config.maxProcesses);
     this.cpu = new CPU();
-    this.simEngine = new SimulationEngine(this.cpu);
+    this.simEngine = new SimulationEngine(this);
     this.jobGenerator = new JobGenerator();
 
     this.config = config; // для UI и диапазонов генерации
+    this.schedulerConfig = appConfig.scheduler;
+    this.scheduler = new Scheduler(this.schedulerConfig);
   }
 
   /**
@@ -35,8 +41,9 @@ export default class OS {
     this.processTable = new ProcessTable(this.config.maxProcesses);
     this.memoryManager = new MemoryManager(this.config.totalMemory);
     this.cpu = new CPU();
-    this.simEngine = new SimulationEngine(this.cpu);
+    this.simEngine = new SimulationEngine(this);
     this.jobGenerator = new JobGenerator();
+    this.scheduler = new Scheduler(this.schedulerConfig);
   }
 
   /**
@@ -73,10 +80,12 @@ export default class OS {
     this.memoryManager.allocate(process.memorySize);
     process.setReady();
     this.processTable.addProcess(process);
+    this.scheduler.onProcessReady(process);
 
     // Если CPU свободен, назначаем этот процесс
     if (!this.cpu.getCurrentProcess()) {
-      this.cpu.setProcess(process);
+      const q = this.schedulerConfig.quantum;
+      this.cpu.setProcess(process, q);
     }
   }
 
@@ -158,16 +167,30 @@ export default class OS {
    * Выполняет один такт симуляции
    */
   tick() {
-    // Выполнить текущий процесс
-    this.cpu.tick();
+    const running = this.cpu.getCurrentProcess();
+    if (running) {
+      // Выполняем один такт
+      this.cpu.tick();
+      // Если завершился
+      if (!this.cpu.getCurrentProcess() && running.isTerminated()) {
+        this.scheduler.onProcessTerminated(running);
+      } else if (this.cpu.isQuantumExpired()) {
+        // Квант истёк: снять процесс, вернуть в READY
+        this.scheduler.onQuantumExpired(running);
+        this.cpu.currentProcess = null;
+        this.cpu.state = "IDLE";
+      }
+    }
 
-    // Если CPU свободен, назначить первый READY-процесс из таблицы
-    if (!this.cpu.getCurrentProcess()) {
-      const next = this.processTable
-        .getProcesses()
-        .find((p) => p.state === "READY");
+    // Старение очереди готовности
+    this.scheduler.tickAging();
+
+    // Если ЦП простаивает — выбрать следующий
+    if (this.cpu.isIdle()) {
+      const next = this.scheduler.getNextProcessForCPU();
       if (next) {
-        this.cpu.setProcess(next);
+        next.setReady();
+        this.cpu.setProcess(next, this.schedulerConfig.quantum);
       }
     }
   }
@@ -215,6 +238,8 @@ export default class OS {
       PID: p.id,
       PC: p.pc,
       State: p.state,
+      PriorityBase: (p as any).basePriority,
+      PriorityDyn: (p as any).dynamicPriority,
     }));
   }
 
