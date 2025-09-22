@@ -61,8 +61,17 @@ export default class OS {
    * Загрузка процесса в систему
    */
   loadProcess(process: Process) {
-    // Выделяем память и добавляем процесс
+    // Проверяем наличие места в таблице и достаточной памяти
+    if (!this.processTable.hasSpace()) {
+      throw new Error("Таблица процессов заполнена!");
+    }
+    if (!this.memoryManager.hasSpace(process.memorySize)) {
+      throw new Error("Недостаточно памяти для загрузки процесса!");
+    }
+
+    // Выделяем память, подготавливаем процесс и добавляем в таблицу
     this.memoryManager.allocate(process.memorySize);
+    process.setReady();
     this.processTable.addProcess(process);
 
     // Если CPU свободен, назначаем этот процесс
@@ -161,5 +170,70 @@ export default class OS {
         this.cpu.setProcess(next);
       }
     }
+  }
+
+  /**
+   * Проверка возможности загрузки процесса заданного размера
+   */
+  canLoad(size: number): boolean {
+    return this.processTable.hasSpace() && this.memoryManager.hasSpace(size);
+  }
+
+  /**
+   * Начальная загрузка: генерировать и загружать процессы, пока хватает памяти/места
+   */
+  initialLoad(
+    minMemory: number,
+    maxMemory: number,
+    minInstructions: number,
+    maxInstructions: number,
+  ) {
+    // Бесконечный поток задач с остановкой по ресурсу
+    // Защита от потенциального бесконечного цикла при слишком больших мин. требованиях
+    const safetyLimit = this.config.maxProcesses * 10;
+    let attempts = 0;
+    while (attempts < safetyLimit) {
+      attempts += 1;
+      if (!this.processTable.hasSpace()) break;
+      const candidate = this.generateJob(
+        minMemory,
+        maxMemory,
+        minInstructions,
+        maxInstructions,
+      );
+      if (!this.canLoad(candidate.memorySize)) break;
+      this.loadProcess(candidate);
+    }
+  }
+
+  /**
+   * Получить таблицу PSW для вывода (№, PID, PC, State)
+   */
+  getPSWTable() {
+    return this.processTable.getProcesses().map((p, idx) => ({
+      No: idx + 1,
+      PID: p.id,
+      PC: p.pc,
+      State: p.state,
+    }));
+  }
+
+  /**
+   * Получить статистику памяти и формулы
+   */
+  getMemoryStats() {
+    const total = this.memoryManager.totalMemory;
+    const free = this.memoryManager.getFreeMemory();
+    const used = total - free;
+    return {
+      total,
+      used,
+      free,
+      formulas: {
+        used: "used = total - free",
+        free: "free = total - used",
+        canLoad: "canLoad(size) = free >= size",
+      },
+    };
   }
 }

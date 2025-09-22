@@ -1,9 +1,10 @@
 import readline from "readline";
 import OS from "./core/OS";
+import appConfig from "./config";
 
 const os = new OS({
-  totalMemory: 100,
-  maxProcesses: 32,
+  totalMemory: appConfig.system.totalMemory,
+  maxProcesses: appConfig.system.maxProcesses,
 });
 
 const rl = readline.createInterface({
@@ -17,8 +18,9 @@ const helpText = `
 /start   — запустить симуляцию
 /stop    — остановить симуляцию
 /gen     — сгенерировать новый процесс
+/init    — начальная загрузка (генерировать и загрузить пока хватает памяти)
 /ps      — список процессов
-/mem     — показать свободную память
+/mem     — показать статистику памяти
 /exit    — выйти из программы
 /?       — показать эту справку
 `;
@@ -44,26 +46,47 @@ rl.on("line", (line) => {
 
     case "/gen":
       try {
-        const p = os.generateJob(5, 20, 10, 50);
-        os.loadProcess(p);
-        console.log(`Процесс создан: PID=${p.id}`);
+        const { minMemory, maxMemory, minInstructions, maxInstructions } =
+          appConfig.generator;
+        const p = os.generateJob(
+          minMemory,
+          maxMemory,
+          minInstructions,
+          maxInstructions,
+        );
+        if (os.canLoad(p.memorySize)) {
+          os.loadProcess(p);
+          console.log(`Процесс создан и загружен: PID=${p.id}`);
+        } else {
+          console.log(
+            `Недостаточно памяти для загрузки процесса PID=${p.id} (size=${p.memorySize}). Свободно=${os.memoryManager.getFreeMemory()}`,
+          );
+        }
       } catch (e) {
         console.error("Ошибка генерации процесса:", e);
       }
       break;
 
+    case "/init":
+      try {
+        const { minMemory, maxMemory, minInstructions, maxInstructions } =
+          appConfig.generator;
+        os.initialLoad(minMemory, maxMemory, minInstructions, maxInstructions);
+        console.log("Начальная загрузка завершена");
+      } catch (e) {
+        console.error("Ошибка начальной загрузки:", e);
+      }
+      break;
+
     case "/ps":
-      console.table(
-        os.processTable.getProcesses().map((p) => ({
-          PID: p.id,
-          State: p.state,
-          PC: p.pc,
-        })),
-      );
+      console.table(os.getPSWTable());
       break;
 
     case "/mem":
-      console.log("Свободная память:", os.memoryManager.getFreeMemory());
+      const mem = os.getMemoryStats();
+      console.log(
+        `Память: total=${mem.total}, used=${mem.used}, free=${mem.free}`,
+      );
       break;
 
     case "/exit":
