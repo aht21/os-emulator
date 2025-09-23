@@ -7,6 +7,19 @@ const os = new OS({
   maxProcesses: appConfig.system.maxProcesses,
 });
 
+let psInterval: ReturnType<typeof setInterval> | null = null;
+
+function renderPS() {
+  console.clear();
+  console.log("Таблица процессов (автообновление)");
+  console.table(os.getPSWTable());
+  console.log(
+    `CPU: ${os.cpu.state} | Active PID: ${os.cpu.getCurrentProcess()?.id ?? 
+      "-"} | Quantum left: ${os.cpu.remainingQuantum}`,
+  );
+  console.log("Нажмите /ps ещё раз, чтобы остановить автообновление.");
+}
+
 const rl = readline.createInterface({
   input: process.stdin,
   output: process.stdout,
@@ -85,7 +98,14 @@ rl.on("line", (line) => {
       break;
 
     case "/ps":
-      console.table(os.getPSWTable());
+      if (psInterval) {
+        clearInterval(psInterval);
+        psInterval = null;
+        console.log("Автообновление таблицы процессов остановлено.");
+      } else {
+        renderPS();
+        psInterval = setInterval(renderPS, 500);
+      }
       break;
 
     case "/mem":

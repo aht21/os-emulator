@@ -1,4 +1,5 @@
 import OS from "./OS";
+import appConfig from "../config";
 
 /**
  * Класс SimulationEngine управляет временем выполнения процессов
@@ -16,7 +17,7 @@ export default class SimulationEngine {
   constructor(os: OS) {
     this.os = os;
     this.intervalId = null; // ID таймера
-    this.speed = 2; // тактов в секунду (2 по умолчанию)
+    this.speed = appConfig.simulation.ticksPerSecond; // тактов в секунду
     this.minSpeed = 0.1;
     this.maxSpeed = 1000;
   }

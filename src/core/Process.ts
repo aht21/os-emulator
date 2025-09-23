@@ -1,3 +1,5 @@
+import Memory from "./Memory";
+import Command from "./Command";
 export type ProcessState =
   | "NEW"
   | "LOADING"
@@ -20,6 +22,8 @@ export default class Process {
   basePriority: number;
   dynamicPriority: number;
   agingCounter: number;
+  memory: Memory;
+  currentCommand: Command | null;
 
   /**
    * @param id - уникальный идентификатор процесса
@@ -42,6 +46,9 @@ export default class Process {
     this.basePriority = basePriority;
     this.dynamicPriority = basePriority;
     this.agingCounter = 0;
+
+    this.memory = new Memory(memorySize);
+    this.currentCommand = null;
   }
 
   /**
@@ -106,5 +113,13 @@ export default class Process {
   applyRunPenalty(step: number, minPriority: number) {
     this.dynamicPriority = Math.max(minPriority, this.dynamicPriority - step);
     this.agingCounter = 0;
+  }
+
+  setCurrentCommand(cmd: Command | null) {
+    this.currentCommand = cmd;
+  }
+
+  getCurrentCommandDescription(): string {
+    return this.currentCommand ? this.currentCommand.getDescription() : "";
   }
 }
