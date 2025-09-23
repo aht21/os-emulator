@@ -1,4 +1,5 @@
 import Process from "./Process.js";
+import appConfig from "../config.js";
 
 /**
  * Класс JobGenerator создаёт новые процессы
@@ -27,7 +28,15 @@ export default class JobGenerator {
       maxInstructions,
     );
 
-    return new Process(Number(pid), memorySize, totalInstructions);
+    const { minPriority, maxPriority, basePriority } = appConfig.scheduler;
+    const randomPriority = this.getRandomInt(minPriority, maxPriority) || basePriority;
+
+    return new Process(
+      Number(pid),
+      memorySize,
+      totalInstructions,
+      randomPriority,
+    );
   }
 
   /**
