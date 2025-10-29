@@ -3,17 +3,17 @@ import Process from "./Process";
 export type CPUState = "WORKING" | "IDLE";
 
 /**
- * Класс CPU выполняет такты процесса
+ * Класс CPU выполняет такты процессов (поддержка многопоточности)
  */
 export default class CPU {
-  currentProcess: Process | null;
+  activeProcesses: Process[];
   state: CPUState;
-  remainingQuantum: number;
+  maxThreads: number;
 
-  constructor() {
-    this.currentProcess = null; // активный процесс (Process)
+  constructor(maxThreads: number = 1) {
+    this.activeProcesses = [];
     this.state = "IDLE";
-    this.remainingQuantum = 0;
+    this.maxThreads = maxThreads;
   }
 
   /**
@@ -21,43 +21,67 @@ export default class CPU {
    * @param process
    */
   setProcess(process: Process, quantum: number) {
-    this.currentProcess = process;
+    if (this.activeProcesses.length >= this.maxThreads) {
+      throw new Error(`CPU уже выполняет максимальное количество процессов (${this.maxThreads})`);
+    }
+    
+    this.activeProcesses.push(process);
     if (process && process.state === "READY") {
       process.setRunning();
     }
-    this.remainingQuantum = quantum;
     this.state = "WORKING";
   }
 
-  /**
-   * Выполняет один такт активного процесса
-   */
-  tick() {
-    if (!this.currentProcess) return;
-
-    this.currentProcess.tick();
-    if (this.remainingQuantum > 0) this.remainingQuantum -= 1;
-
-    if (this.currentProcess.isTerminated()) {
-      this.currentProcess = null; // процесс завершён
+  clearProcess(process: Process) {
+    const index = this.activeProcesses.indexOf(process);
+    if (index !== -1) {
+      this.activeProcesses.splice(index, 1);
+    }
+    if (this.activeProcesses.length === 0) {
       this.state = "IDLE";
-      this.remainingQuantum = 0;
     }
   }
 
   /**
-   * Получить текущий активный процесс
+   * Выполняет один такт для всех активных процессов
+   */
+  tick() {
+    for (let i = this.activeProcesses.length - 1; i >= 0; i--) {
+      const process = this.activeProcesses[i];
+      process.tick();
+
+      if (process.isTerminated()) {
+        this.activeProcesses.splice(i, 1);
+      }
+    }
+
+    if (this.activeProcesses.length === 0) {
+      this.state = "IDLE";
+    }
+  }
+
+  /**
+   * Получить текущий активный процесс (первый)
    * @returns {Process | null}
    */
   getCurrentProcess() {
-    return this.currentProcess;
+    return this.activeProcesses.length > 0 ? this.activeProcesses[0] : null;
   }
 
-  isQuantumExpired(): boolean {
-    return !!this.currentProcess && this.remainingQuantum <= 0;
+  getAllActiveProcesses(): Process[] {
+    return [...this.activeProcesses];
+  }
+
+  isQuantumExpired(process: Process): boolean {
+    // Для многопоточности каждый процесс имеет свой квант
+    return process.state === "RUNNING" && process.pc % 5 === 0; // упрощённая проверка кванта
   }
 
   isIdle(): boolean {
-    return this.currentProcess === null;
+    return this.activeProcesses.length === 0;
+  }
+
+  hasSpace(): boolean {
+    return this.activeProcesses.length < this.maxThreads;
   }
 }
