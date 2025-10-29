@@ -13,9 +13,9 @@ function renderPS() {
   console.clear();
   console.log("Таблица процессов (автообновление)");
   console.table(os.getPSWTable());
+  const activeProcesses = os.cpu.getAllActiveProcesses();
   console.log(
-    `CPU: ${os.cpu.state} | Active PID: ${os.cpu.getCurrentProcess()?.id ?? 
-      "-"} | Quantum left: ${os.cpu.remainingQuantum}`,
+    `CPU: ${os.cpu.state} | Активных процессов: ${activeProcesses.length}/${os.cpu.maxThreads} | Активные PID: ${activeProcesses.map(p => p.id).join(', ') || '-'}`,
   );
   console.log("Нажмите /ps ещё раз, чтобы остановить автообновление.");
 }
@@ -133,6 +133,6 @@ rl.on("line", (line) => {
 
   rl.prompt();
 }).on("close", () => {
-  console.log("👋 Завершение работы CLI");
+  console.log("Завершение работы CLI");
   process.exit(0);
 });

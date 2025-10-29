@@ -59,6 +59,8 @@ export type AppConfig = {
     ticksPerSecond: number;
     // Через сколько тиков удалять завершённые процессы из таблицы
     removeTerminatedAfterTicks: number;
+    // Количество одновременно выполняемых процессов (потоков)
+    threadCount: number;
   };
 };
 
@@ -93,6 +95,7 @@ const config: AppConfig = {
   simulation: {
     ticksPerSecond: 50, // тактов в секунду
     removeTerminatedAfterTicks: 200, // задержка удаления завершённых (тик)
+    threadCount: 1, // количество потоков (одновременно выполняемых процессов)
   },
 };
 

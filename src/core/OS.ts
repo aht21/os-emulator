@@ -31,7 +31,7 @@ export default class OS {
   constructor(config: Config) {
     this.memoryManager = new MemoryManager(config.totalMemory);
     this.processTable = new ProcessTable(config.maxProcesses);
-    this.cpu = new CPU();
+    this.cpu = new CPU(appConfig.simulation.threadCount);
     this.simEngine = new SimulationEngine(this);
     this.jobGenerator = new JobGenerator();
 
@@ -50,7 +50,7 @@ export default class OS {
   initialize() {
     this.processTable = new ProcessTable(this.config.maxProcesses);
     this.memoryManager = new MemoryManager(this.config.totalMemory);
-    this.cpu = new CPU();
+    this.cpu = new CPU(appConfig.simulation.threadCount);
     this.simEngine = new SimulationEngine(this);
     this.jobGenerator = new JobGenerator();
     this.scheduler = new Scheduler(this.schedulerConfig);
@@ -96,8 +96,8 @@ export default class OS {
     this.processTable.addProcess(process);
     this.scheduler.onProcessReady(process);
 
-    // Если CPU свободен, назначаем этот процесс
-    if (!this.cpu.getCurrentProcess()) {
+    // Если CPU имеет свободные потоки, назначаем этот процесс
+    if (this.cpu.hasSpace()) {
       const q = this.schedulerConfig.quantum;
       this.cpu.setProcess(process, q);
     }
@@ -182,48 +182,38 @@ export default class OS {
    */
   tick() {
     this.tickCounter += 1;
-    const running = this.cpu.getCurrentProcess();
-    if (running) {
-      // Выполняем один такт
+    const activeProcesses = this.cpu.getAllActiveProcesses();
+    
+    // Обработка всех активных процессов
+    for (const process of activeProcesses) {
       // Сгенерировать команду, если её нет
-      if (!running.currentCommand) {
-        running.setCurrentCommand(this.commandGenerator.generateCommand(running));
+      if (!process.currentCommand) {
+        process.setCurrentCommand(this.commandGenerator.generateCommand(process));
       }
 
       // Обработка команд
-      const cmd = running.currentCommand;
+      const cmd = process.currentCommand;
       if (cmd) {
         if (cmd.type === "COMPUTE") {
-          cmd.execute(running.memory);
+          cmd.execute(process.memory);
         } else if (cmd.type === "IO") {
-          // Отправить в I/O и снять с ЦП
-          this.ioProcessor.submitIO(running, cmd);
-          running.setCurrentCommand(null);
-          this.cpu.currentProcess = null;
-          this.cpu.state = "IDLE";
+          this.handleIoRequest(process, cmd);
         } else if (cmd.type === "EXIT" || cmd.type === "ERROR") {
-          running.terminate();
-          running.setCurrentCommand(null);
+          process.terminate();
+          process.setCurrentCommand(null);
         }
       }
 
-      this.cpu.tick();
-      // Если завершился
-      if (!this.cpu.getCurrentProcess() && running.isTerminated()) {
-        this.scheduler.onProcessTerminated(running);
-        // Планируем удаление записи о процессе через N тиков
-        this.pendingRemoval.push({
-          id: running.id,
-          removeAt: this.tickCounter + appConfig.simulation.removeTerminatedAfterTicks,
-          size: running.memorySize,
-        });
-      } else if (this.cpu.isQuantumExpired()) {
-        // Квант истёк: снять процесс, вернуть в READY
-        this.scheduler.onQuantumExpired(running);
-        this.cpu.currentProcess = null;
-        this.cpu.state = "IDLE";
+      // Проверка завершения или истечения кванта
+      if (process.isTerminated()) {
+        this.handleProcessTerminated(process);
+      } else if (this.cpu.isQuantumExpired(process)) {
+        this.handleTimeInterrupt(process);
       }
     }
+
+    // Выполнить такт для всех активных процессов
+    this.cpu.tick();
 
     // Старение очереди готовности
     this.scheduler.tickAging();
@@ -231,17 +221,16 @@ export default class OS {
     // Продвинуть I/O и вернуть готовые процессы
     const completedIO = this.ioProcessor.tick();
     for (const item of completedIO) {
-      item.process.setReady();
-      this.scheduler.onProcessReady(item.process);
+      this.handleIoComplete(item.process);
     }
 
-    // Если ЦП простаивает — выбрать следующий
-    if (this.cpu.isIdle()) {
+    // Если CPU имеет свободные потоки — выбрать следующие процессы
+    while (this.cpu.hasSpace()) {
       const next = this.scheduler.getNextProcessForCPU();
-      if (next) {
-        next.setReady();
-        this.cpu.setProcess(next, this.schedulerConfig.quantum);
-      }
+      if (!next) break;
+      
+      next.setReady();
+      this.cpu.setProcess(next, this.schedulerConfig.quantum);
     }
 
     // Удалить завершённые по истечении задержки
@@ -256,6 +245,34 @@ export default class OS {
         this.pendingRemoval = this.pendingRemoval.filter((x) => x.removeAt > now);
       }
     }
+  }
+
+  // === Регулировщик: централизованные операции смены состояний и прерываний ===
+  private handleIoRequest(process: Process, cmd: any) {
+    // Отправить в I/O и снять с ЦП
+    this.ioProcessor.submitIO(process, cmd);
+    process.setCurrentCommand(null);
+    this.cpu.clearProcess(process);
+  }
+
+  private handleIoComplete(process: Process) {
+    process.setReady();
+    this.scheduler.onProcessReady(process);
+  }
+
+  private handleTimeInterrupt(process: Process) {
+    // Квант истёк: вернуть в READY, штраф уже ставится в Scheduler
+    this.scheduler.onQuantumExpired(process);
+    this.cpu.clearProcess(process);
+  }
+
+  private handleProcessTerminated(process: Process) {
+    this.scheduler.onProcessTerminated(process);
+    this.pendingRemoval.push({
+      id: process.id,
+      removeAt: this.tickCounter + appConfig.simulation.removeTerminatedAfterTicks,
+      size: process.memorySize,
+    });
   }
 
   /**
