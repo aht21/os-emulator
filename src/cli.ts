@@ -33,6 +33,7 @@ const helpText = `
 /gen     — сгенерировать новый процесс
 /init    — начальная загрузка (генерировать и загрузить пока хватает памяти)
 /ps      — список процессов
+/screen  — интерактивная индикация параметров системы
 /mem     — показать статистику памяти
 /exit    — выйти из программы
 /?       — показать эту справку
@@ -107,6 +108,52 @@ rl.on("line", (line) => {
         psInterval = setInterval(renderPS, 500);
       }
       break;
+
+    case "/screen": {
+      const renderScreen = () => {
+        console.clear();
+        console.log("Модель ОС — Индикация параметров\n");
+        // Постоянная информация
+        console.log("Постоянно: Алгоритм — Относительные приоритеты; Управление — /start, /stop, /ps, /screen, /mem, /?\n");
+        // Параметры системы
+        const sys = appConfig.system;
+        console.log(`Система: Память=${sys.totalMemory}, Таблица процессов=${sys.maxProcesses}, Потоков ЦП=${appConfig.simulation.threadCount}`);
+        // Параметры генератора
+        const gen = appConfig.generator;
+        console.log(`Задание: Память[${gen.minMemory}-${gen.maxMemory}], Команды[${gen.minInstructions}-${gen.maxInstructions}]`);
+        // Параметры планировщика
+        const sch = appConfig.scheduler;
+        console.log(`Планировщик: квант=${sch.quantum}, приоритет[${sch.minPriority}-${sch.maxPriority}], agingStep=${sch.agingStep}/${sch.agingIntervalTicks}, penalty=${sch.runPenaltyStep}`);
+        // Параметры CPU
+        const active = os.cpu.getAllActiveProcesses();
+        const stats = os.getSystemParams();
+        console.log(`CPU: состояние=${os.cpu.state}, активных=${active.length}/${os.cpu.maxThreads}, утилизация=${(stats.cpuUtilization*100).toFixed(1)}%`);
+        // Последовательность
+        console.log(`Последние процессы: ${stats.lastExecuted.join(", ") || "-"}`);
+        // Очереди/средние
+        console.log(`Очередь READY(avg)=${stats.avgReadyLen.toFixed(2)}, Выполнено=${stats.completed}, AvgWait=${stats.avgWaiting.toFixed(2)}, AvgTurn=${stats.avgTurnaround.toFixed(2)}, Throughput=${stats.throughputPerTick.toFixed(3)} per tick\n`);
+        // Таблица процессов (все параметры на одном окне)
+        console.table(
+          os.processTable.getProcesses().map((p) => ({
+            PID: p.id,
+            State: p.state,
+            PC: p.pc,
+            PriBase: (p as any).basePriority,
+            PriDyn: (p as any).dynamicPriority,
+            Run: (p as any).runTicks,
+            Wait: (p as any).waitTicks,
+            Arr: (p as any).arrivalTick ?? "",
+            Start: (p as any).startTick ?? "",
+            End: (p as any).endTick ?? "",
+            Cmd: (p as any).getCurrentCommandDescription ? (p as any).getCurrentCommandDescription() : "",
+          })),
+        );
+      };
+      renderScreen();
+      if (psInterval) clearInterval(psInterval);
+      psInterval = setInterval(renderScreen, 500);
+      break;
+    }
 
     case "/mem":
       const mem = os.getMemoryStats();
