@@ -79,6 +79,11 @@ export default class Scheduler {
     const idx = this.readyQueue.indexOf(p);
     if (idx !== -1) this.readyQueue.splice(idx, 1);
   }
+
+  /** Количество процессов в очереди готовности */
+  getReadyCount(): number {
+    return this.readyQueue.length;
+  }
 }
 
 

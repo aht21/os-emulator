@@ -24,6 +24,12 @@ export default class Process {
   agingCounter: number;
   memory: Memory;
   currentCommand: Command | null;
+  // metrics
+  arrivalTick?: number;
+  startTick?: number;
+  endTick?: number;
+  runTicks: number;
+  waitTicks: number;
 
   /**
    * @param id - уникальный идентификатор процесса
@@ -49,6 +55,8 @@ export default class Process {
 
     this.memory = new Memory(memorySize);
     this.currentCommand = null;
+    this.runTicks = 0;
+    this.waitTicks = 0;
   }
 
   /**

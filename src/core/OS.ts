@@ -27,6 +27,17 @@ export default class OS {
   ioProcessor: IOProcessor;
   private tickCounter: number;
   private pendingRemoval: Array<{ id: number; removeAt: number; size: number }>;
+  private metrics: {
+    totalTicks: number;
+    busyThreadTicks: number; // суммарное число активных потоков по тикам
+    completedCount: number;
+    sumTurnaround: number;
+    sumWaiting: number;
+    sumService: number;
+    readyQueueSamples: number;
+    readyQueueSamplesCount: number;
+    lastExecuted: number[]; // последние до 16 PID
+  };
 
   constructor(config: Config) {
     this.memoryManager = new MemoryManager(config.totalMemory);
@@ -42,6 +53,17 @@ export default class OS {
     this.ioProcessor = new IOProcessor();
     this.tickCounter = 0;
     this.pendingRemoval = [];
+    this.metrics = {
+      totalTicks: 0,
+      busyThreadTicks: 0,
+      completedCount: 0,
+      sumTurnaround: 0,
+      sumWaiting: 0,
+      sumService: 0,
+      readyQueueSamples: 0,
+      readyQueueSamplesCount: 0,
+      lastExecuted: [],
+    };
   }
 
   /**
@@ -58,6 +80,17 @@ export default class OS {
     this.ioProcessor = new IOProcessor();
     this.tickCounter = 0;
     this.pendingRemoval = [];
+    this.metrics = {
+      totalTicks: 0,
+      busyThreadTicks: 0,
+      completedCount: 0,
+      sumTurnaround: 0,
+      sumWaiting: 0,
+      sumService: 0,
+      readyQueueSamples: 0,
+      readyQueueSamplesCount: 0,
+      lastExecuted: [],
+    };
   }
 
   /**
@@ -95,6 +128,7 @@ export default class OS {
     process.setReady();
     this.processTable.addProcess(process);
     this.scheduler.onProcessReady(process);
+    process.arrivalTick = this.tickCounter;
 
     // Если CPU имеет свободные потоки, назначаем этот процесс
     if (this.cpu.hasSpace()) {
@@ -182,10 +216,16 @@ export default class OS {
    */
   tick() {
     this.tickCounter += 1;
+    this.metrics.totalTicks += 1;
     const activeProcesses = this.cpu.getAllActiveProcesses();
     
     // Обработка всех активных процессов
     for (const process of activeProcesses) {
+      // учёт начала обслуживания
+      if (process.startTick === undefined) process.startTick = this.tickCounter;
+      // наработка времени обслуживания
+      process.runTicks += 1;
+
       // Сгенерировать команду, если её нет
       if (!process.currentCommand) {
         process.setCurrentCommand(this.commandGenerator.generateCommand(process));
@@ -215,6 +255,9 @@ export default class OS {
     // Выполнить такт для всех активных процессов
     this.cpu.tick();
 
+    // Учёт загрузки CPU (по потокам)
+    this.metrics.busyThreadTicks += activeProcesses.length;
+
     // Старение очереди готовности
     this.scheduler.tickAging();
 
@@ -231,6 +274,28 @@ export default class OS {
       
       next.setReady();
       this.cpu.setProcess(next, this.schedulerConfig.quantum);
+    }
+
+    // Учет ожидания для всех READY
+    this.processTable
+      .getProcesses()
+      .filter((p) => p.state === "READY")
+      .forEach((p) => (p.waitTicks += 1));
+
+    // Семплирование длины очереди готовности
+    this.metrics.readyQueueSamples += this.scheduler.getReadyCount();
+    this.metrics.readyQueueSamplesCount += 1;
+
+    // Последовательность выполненных PID (последние 16)
+    if (activeProcesses.length > 0) {
+      for (const p of activeProcesses) {
+        this.metrics.lastExecuted.push(p.id);
+      }
+      if (this.metrics.lastExecuted.length > 16) {
+        this.metrics.lastExecuted = this.metrics.lastExecuted.slice(
+          -16,
+        );
+      }
     }
 
     // Удалить завершённые по истечении задержки
@@ -273,6 +338,50 @@ export default class OS {
       removeAt: this.tickCounter + appConfig.simulation.removeTerminatedAfterTicks,
       size: process.memorySize,
     });
+    // Метрики завершения
+    if (process.arrivalTick !== undefined) {
+      const turnaround = this.tickCounter - process.arrivalTick;
+      this.metrics.completedCount += 1;
+      this.metrics.sumTurnaround += turnaround;
+      this.metrics.sumWaiting += process.waitTicks;
+      this.metrics.sumService += process.runTicks;
+      process.endTick = this.tickCounter;
+    }
+  }
+
+  // === Публичные отчёты для индикации ===
+  getSystemParams() {
+    const cpuUtil =
+      this.metrics.totalTicks > 0
+        ? this.metrics.busyThreadTicks /
+          (this.metrics.totalTicks * appConfig.simulation.threadCount)
+        : 0;
+    const avgReadyLen =
+      this.metrics.readyQueueSamplesCount > 0
+        ? this.metrics.readyQueueSamples / this.metrics.readyQueueSamplesCount
+        : 0;
+    const avgWait =
+      this.metrics.completedCount > 0
+        ? this.metrics.sumWaiting / this.metrics.completedCount
+        : 0;
+    const avgTurn =
+      this.metrics.completedCount > 0
+        ? this.metrics.sumTurnaround / this.metrics.completedCount
+        : 0;
+    const throughput =
+      this.metrics.totalTicks > 0
+        ? this.metrics.completedCount / this.metrics.totalTicks
+        : 0;
+    return {
+      totalTicks: this.metrics.totalTicks,
+      cpuUtilization: cpuUtil,
+      avgReadyLen,
+      completed: this.metrics.completedCount,
+      avgWaiting: avgWait,
+      avgTurnaround: avgTurn,
+      throughputPerTick: throughput,
+      lastExecuted: [...this.metrics.lastExecuted],
+    };
   }
 
   /**
