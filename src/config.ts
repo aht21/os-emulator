@@ -61,6 +61,17 @@ export type AppConfig = {
     removeTerminatedAfterTicks: number;
     // Количество одновременно выполняемых процессов (потоков)
     threadCount: number;
+    // Накладные расходы ОС для расчёта T_mono (в тактах)
+    overheads?: {
+      loadTicks: number; // загрузка процесса
+      terminateTicks: number; // завершение процесса
+      ctxReadyToActive: number; // переключение Готов -> Активен
+      ctxActiveToReady: number; // переключение Активен -> Готов
+      ctxActiveToBlocked: number; // переключение Активен -> Блокирован (I/O)
+      ctxBlockedToReady: number; // переключение Блокирован -> Готов
+      ioInitTicks: number; // логическая инициализация I/O
+      ioInterruptServiceTicks: number; // обслуживание прерывания по окончанию I/O
+    };
   };
 };
 
@@ -96,6 +107,16 @@ const config: AppConfig = {
     ticksPerSecond: 50, // тактов в секунду
     removeTerminatedAfterTicks: 200, // задержка удаления завершённых (тик)
     threadCount: 1, // количество потоков (одновременно выполняемых процессов)
+    overheads: {
+      loadTicks: 2,
+      terminateTicks: 1,
+      ctxReadyToActive: 1,
+      ctxActiveToReady: 1,
+      ctxActiveToBlocked: 1,
+      ctxBlockedToReady: 1,
+      ioInitTicks: 1,
+      ioInterruptServiceTicks: 1,
+    },
   },
 };
 

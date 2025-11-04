@@ -35,6 +35,8 @@ const helpText = `
 /ps      — список процессов
 /screen  — интерактивная индикация параметров системы
 /mem     — показать статистику памяти
+/analysis — разложение T_mono/T_multi по процессам
+/perf     — производительность vs. монорежим
 /exit    — выйти из программы
 /?       — показать эту справку
 
@@ -161,6 +163,75 @@ rl.on("line", (line) => {
         `Память: total=${mem.total}, used=${mem.used}, free=${mem.free}`,
       );
       break;
+
+    case "/analysis": {
+      const renderAnalysis = () => {
+        console.clear();
+        console.log("Анализ: компактная таблица T_mono/T_multi (повторный /analysis остановит автообновление)\n");
+        console.log(
+          [
+            "St: состояние",
+            "Instr: число команд",
+            "Run: отработанные тики",
+            "Wait: тики ожидания (READY)",
+            "IO: длительность I/O",
+            "OvhIO: инициализация I/O + ISR",
+            "OvhCtx: переключения контекста",
+            "Tm: T_mono",
+            "Tt: T_multi",
+          ].join(" | ")
+        );
+        console.log("");
+        const table = os.getTimeBreakdownTable();
+        const compact = table.map((r: any) => ({
+          PID: r.PID,
+          St: r.State,
+          Instr: r.totalInstructions,
+          Run: r.runTicks,
+          Wait: r.waitTicks,
+          IO: r.ioBusyTicks,
+          OvhIO: (r.ioInitOverheadTicks + r.ioInterruptServiceTicks),
+          OvhCtx: r.contextSwitchOverheadTicks,
+          Tm: r.T_mono,
+          Tt: r.T_multi ?? "-",
+        }));
+        console.table(compact);
+      };
+      if (psInterval) {
+        clearInterval(psInterval);
+        psInterval = null;
+        console.log("Автообновление analysis остановлено.");
+      } else {
+        renderAnalysis();
+        psInterval = setInterval(renderAnalysis, 500);
+      }
+      break;
+    }
+
+    case "/perf": {
+      const renderPerf = () => {
+        console.clear();
+        console.log("Производительность (auto-refresh): /perf снова — остановка\n");
+        const perf = os.getMonoMultiMetrics();
+        console.log(`Ticks=${perf.totalTicks}, Completed=${perf.completedCount}, Avg T_mono=${perf.avgTmono.toFixed(2)} такт.`);
+        console.log(`Моно-возможные завершения: ${perf.monoPossibleCompleted.toFixed(2)}; Фактически завершено: ${perf.completedCount}`);
+        console.log(`Производительность (к мультипрограммированию): ${perf.performancePercent.toFixed(1)}%`);
+        if (perf.details && perf.details.length > 0) {
+          const head = perf.details.slice(-5);
+          console.log("Последние процессы (до 5):");
+          console.table(head);
+        }
+      };
+      if (psInterval) {
+        clearInterval(psInterval);
+        psInterval = null;
+        console.log("Автообновление perf остановлено.");
+      } else {
+        renderPerf();
+        psInterval = setInterval(renderPerf, 500);
+      }
+      break;
+    }
 
     case "/exit":
       rl.close();

@@ -130,6 +130,14 @@ export default class OS {
     this.scheduler.onProcessReady(process);
     process.arrivalTick = this.tickCounter;
 
+    // Накладные расходы: загрузка
+    const ovh = appConfig.simulation.overheads;
+    if (ovh) {
+      process.contextSwitchOverheadTicks =
+        (process.contextSwitchOverheadTicks || 0) + ovh.loadTicks;
+      this.increaseReadyProcessesTime(ovh.loadTicks);
+    }
+
     // Если CPU имеет свободные потоки, назначаем этот процесс
     if (this.cpu.hasSpace()) {
       const q = this.schedulerConfig.quantum;
@@ -272,6 +280,14 @@ export default class OS {
       const next = this.scheduler.getNextProcessForCPU();
       if (!next) break;
       
+      // Накладные расходы: переключение READY -> RUNNING
+      const ovh = appConfig.simulation.overheads;
+      if (ovh) {
+        next.contextSwitchOverheadTicks =
+          (next.contextSwitchOverheadTicks || 0) + ovh.ctxReadyToActive;
+        this.increaseReadyProcessesTime(ovh.ctxReadyToActive);
+      }
+
       next.setReady();
       this.cpu.setProcess(next, this.schedulerConfig.quantum);
     }
@@ -314,6 +330,19 @@ export default class OS {
 
   // === Регулировщик: централизованные операции смены состояний и прерываний ===
   private handleIoRequest(process: Process, cmd: any) {
+    // Учесть накладные расходы и занятость I/O
+    const ovh = appConfig.simulation.overheads;
+    if (ovh) {
+      process.contextSwitchOverheadTicks =
+        (process.contextSwitchOverheadTicks || 0) + ovh.ctxActiveToBlocked;
+      process.ioInitOverheadTicks =
+        (process.ioInitOverheadTicks || 0) + ovh.ioInitTicks;
+      this.increaseReadyProcessesTime(ovh.ctxActiveToBlocked + ovh.ioInitTicks);
+    }
+    if ((cmd as any).executionTime) {
+      process.ioBusyTicks = (process.ioBusyTicks || 0) + (cmd as any).executionTime;
+    }
+
     // Отправить в I/O и снять с ЦП
     this.ioProcessor.submitIO(process, cmd);
     process.setCurrentCommand(null);
@@ -321,17 +350,39 @@ export default class OS {
   }
 
   private handleIoComplete(process: Process) {
+    // Накладные расходы: прерывание по окончанию I/O и переход в READY
+    const ovh = appConfig.simulation.overheads;
+    if (ovh) {
+      process.ioInterruptServiceTicks =
+        (process.ioInterruptServiceTicks || 0) + ovh.ioInterruptServiceTicks;
+      process.contextSwitchOverheadTicks =
+        (process.contextSwitchOverheadTicks || 0) + ovh.ctxBlockedToReady;
+      this.increaseReadyProcessesTime(ovh.ioInterruptServiceTicks + ovh.ctxBlockedToReady);
+    }
     process.setReady();
     this.scheduler.onProcessReady(process);
   }
 
   private handleTimeInterrupt(process: Process) {
     // Квант истёк: вернуть в READY, штраф уже ставится в Scheduler
+    const ovh = appConfig.simulation.overheads;
+    if (ovh) {
+      process.contextSwitchOverheadTicks =
+        (process.contextSwitchOverheadTicks || 0) + ovh.ctxActiveToReady;
+      this.increaseReadyProcessesTime(ovh.ctxActiveToReady);
+    }
     this.scheduler.onQuantumExpired(process);
     this.cpu.clearProcess(process);
   }
 
   private handleProcessTerminated(process: Process) {
+    // Накладные расходы: завершение процесса
+    const ovh = appConfig.simulation.overheads;
+    if (ovh) {
+      process.contextSwitchOverheadTicks =
+        (process.contextSwitchOverheadTicks || 0) + ovh.terminateTicks;
+      this.increaseReadyProcessesTime(ovh.terminateTicks);
+    }
     this.scheduler.onProcessTerminated(process);
     this.pendingRemoval.push({
       id: process.id,
@@ -346,6 +397,19 @@ export default class OS {
       this.metrics.sumWaiting += process.waitTicks;
       this.metrics.sumService += process.runTicks;
       process.endTick = this.tickCounter;
+    }
+  }
+
+  /**
+   * Увеличить время ожидания для всех процессов в состоянии READY на указанное число тактов
+   */
+  increaseReadyProcessesTime(ticks: number) {
+    if (ticks <= 0) return;
+    const ready = this.processTable
+      .getProcesses()
+      .filter((p) => p.state === "READY");
+    for (const p of ready) {
+      p.waitTicks += ticks;
     }
   }
 
@@ -382,6 +446,85 @@ export default class OS {
       throughputPerTick: throughput,
       lastExecuted: [...this.metrics.lastExecuted],
     };
+  }
+
+  /**
+   * Расчёт T_mono и T_multi, а также относительной производительности (%)
+   */
+  getMonoMultiMetrics() {
+    const ovh = appConfig.simulation.overheads;
+    const completed = this.processTable
+      .getProcesses()
+      .filter((p) => p.endTick !== undefined && p.arrivalTick !== undefined);
+    const details = completed.map((p) => {
+      const tMulti = (p.endTick as number) - (p.arrivalTick as number);
+      const ioBusy = p.ioBusyTicks || 0;
+      const ioInit = p.ioInitOverheadTicks || 0;
+      const ioIsr = p.ioInterruptServiceTicks || 0;
+      const ctx = p.contextSwitchOverheadTicks || 0;
+      const load = ovh ? ovh.loadTicks : 0;
+      const term = ovh ? ovh.terminateTicks : 0;
+      const tMono = p.totalInstructions + ioBusy + ioInit + ioIsr + ctx + load + term;
+      return { pid: p.id, T_multi: tMulti, T_mono: tMono };
+    });
+    const avgMono =
+      details.length > 0
+        ? details.reduce((s, d) => s += d.T_mono, 0) / details.length
+        : 0;
+    const possibleMonoCompleted = avgMono > 0 ? this.metrics.totalTicks / avgMono : 0;
+    const performancePercent = possibleMonoCompleted > 0
+      ? (this.metrics.completedCount / possibleMonoCompleted) * 100
+      : 0;
+    return {
+      completedCount: this.metrics.completedCount,
+      totalTicks: this.metrics.totalTicks,
+      avgTmono: avgMono,
+      monoPossibleCompleted: possibleMonoCompleted,
+      performancePercent,
+      details,
+    };
+  }
+
+  /**
+   * Таблица разложения по составляющим для проверки расчётов T_mono и T_multi
+   */
+  getTimeBreakdownTable() {
+    const ovh = appConfig.simulation.overheads;
+    return this.processTable.getProcesses().map((p) => {
+      const ioBusy = p.ioBusyTicks || 0;
+      const ioInit = p.ioInitOverheadTicks || 0;
+      const ioIsr = p.ioInterruptServiceTicks || 0;
+      const ctx = p.contextSwitchOverheadTicks || 0;
+      const load = ovh ? ovh.loadTicks : 0;
+      const term = ovh ? ovh.terminateTicks : 0;
+      const tMono = p.totalInstructions + ioBusy + ioInit + ioIsr + ctx + load + term;
+      // T_multi = время нахождения в системе (от загрузки до завершения или текущий момент)
+      let tMulti: number | undefined;
+      if (p.arrivalTick !== undefined) {
+        if (p.endTick !== undefined) {
+          // Завершенный процесс: от загрузки до завершения
+          tMulti = p.endTick - p.arrivalTick;
+        } else {
+          // Незавершенный процесс: текущее время в системе
+          tMulti = this.tickCounter - p.arrivalTick;
+        }
+      }
+      return {
+        PID: p.id,
+        State: p.state,
+        totalInstructions: p.totalInstructions,
+        runTicks: p.runTicks,
+        waitTicks: p.waitTicks,
+        ioBusyTicks: ioBusy,
+        ioInitOverheadTicks: ioInit,
+        ioInterruptServiceTicks: ioIsr,
+        contextSwitchOverheadTicks: ctx,
+        loadOverhead: load,
+        terminateOverhead: term,
+        T_mono: tMono,
+        T_multi: tMulti,
+      };
+    });
   }
 
   /**

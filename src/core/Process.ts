@@ -30,6 +30,11 @@ export default class Process {
   endTick?: number;
   runTicks: number;
   waitTicks: number;
+  // detailed accounting for mono-time estimation
+  ioBusyTicks?: number; // суммарное «занятость» I/O для процесса
+  ioInitOverheadTicks?: number; // логическая инициализация I/O
+  ioInterruptServiceTicks?: number; // обслуживание прерываний I/O
+  contextSwitchOverheadTicks?: number; // все контекстные переключения для процесса
 
   /**
    * @param id - уникальный идентификатор процесса
@@ -57,6 +62,10 @@ export default class Process {
     this.currentCommand = null;
     this.runTicks = 0;
     this.waitTicks = 0;
+    this.ioBusyTicks = 0;
+    this.ioInitOverheadTicks = 0;
+    this.ioInterruptServiceTicks = 0;
+    this.contextSwitchOverheadTicks = 0;
   }
 
   /**
