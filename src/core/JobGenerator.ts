@@ -1,48 +1,29 @@
-import Process from "./Process.js";
-import appConfig from "../config.js";
+import { generatorConfig, schedulerConfig } from "../config";
+import Process from "./Process";
 
-/**
- * Класс JobGenerator создаёт новые процессы
- */
 export default class JobGenerator {
-  counter: number;
+  counter = 0;
 
-  constructor() {
-    this.counter = 0; // для генерации уникальных PID
-  }
+  generateProcess(): Process {
+    const { minMemory, maxMemory, minInstructions, maxInstructions } =
+      generatorConfig;
 
-  /**
-   * Генерирует новый процесс с уникальным PID
-   */
-  generateProcess(
-    minMemory: number,
-    maxMemory: number,
-    minInstructions: number,
-    maxInstructions: number,
-  ): Process {
     this.counter += 1;
     const pid = this.counter;
-    const memorySize = this.getRandomInt(minMemory, maxMemory);
+    const memorySize = this.getRandomInt(minMemory.value, maxMemory.value);
     const totalInstructions = this.getRandomInt(
-      minInstructions,
-      maxInstructions,
+      minInstructions.value,
+      maxInstructions.value,
     );
+    const { minPriority, maxPriority, basePriority } = schedulerConfig;
+    const randomPriority =
+      this.getRandomInt(minPriority.value, maxPriority.value) ||
+      basePriority.value;
 
-    const { minPriority, maxPriority, basePriority } = appConfig.scheduler;
-    const randomPriority = this.getRandomInt(minPriority, maxPriority) || basePriority;
-
-    return new Process(
-      Number(pid),
-      memorySize,
-      totalInstructions,
-      randomPriority,
-    );
+    return new Process(pid, memorySize, totalInstructions, randomPriority);
   }
 
-  /**
-   * Вспомогательная функция: случайное число между min и max (включительно)
-   */
-  getRandomInt(min: number, max: number) {
+  getRandomInt(min: number, max: number): number {
     return Math.floor(Math.random() * (max - min + 1)) + min;
   }
 }

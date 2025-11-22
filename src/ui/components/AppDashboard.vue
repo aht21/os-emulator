@@ -1,0 +1,60 @@
+<script setup lang="ts">
+import AppWidget from "./AppWidget.vue";
+import WidgetCPU from "./WidgetCPU.vue";
+import WidgetMemory from "./WidgetMemory.vue";
+import WidgetProcessTable from "./WidgetProcessTable.vue";
+import WidgetSimulation from "./WidgetSimulation.vue";
+</script>
+
+<template>
+  <div class="container dashboard_overflow">
+    <AppWidget name="simulation" class="simulation">
+      <WidgetSimulation />
+    </AppWidget>
+    <AppWidget name="cpu" class="cpu">
+      <WidgetCPU />
+    </AppWidget>
+    <AppWidget name="process table" class="process_table">
+      <WidgetProcessTable />
+    </AppWidget>
+    <AppWidget name="memory" class="memory">
+      <WidgetMemory />
+    </AppWidget>
+    <AppWidget name="performance" class="performance"></AppWidget>
+  </div>
+</template>
+
+<style scoped>
+.dashboard_overflow {
+  flex: 1;
+  display: grid;
+  grid-template-areas:
+    "simulation cpu process_table process_table"
+    "memory memory process_table process_table"
+    "performance performance . .";
+  padding: 2rem 0;
+  grid-template-columns: repeat(4, 1fr);
+  grid-template-rows: 3fr 3fr 4fr;
+  gap: 2rem;
+}
+
+.simulation {
+  grid-area: simulation;
+}
+
+.cpu {
+  grid-area: cpu;
+}
+
+.process_table {
+  grid-area: process_table;
+}
+
+.memory {
+  grid-area: memory;
+}
+
+.performance {
+  grid-area: performance;
+}
+</style>
