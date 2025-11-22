@@ -1,64 +1,121 @@
+import { watch } from "vue";
+import { cpuConfig } from "../config";
 import OS from "./OS";
-import appConfig from "../config";
 
-/**
- * Класс SimulationEngine управляет временем выполнения процессов
- */
 export default class SimulationEngine {
   os: OS;
-  intervalId: null | ReturnType<typeof setInterval>;
-  speed: number;
-  minSpeed: number;
-  maxSpeed: number;
+  intervalId: number | null = null;
+  autoIntervalId: number | null = null;
+  ticksPerSecond = cpuConfig.ticksPerSecond;
+  workingTimeSeconds = 0;
+  private elapsedMs = 0;
 
-  /**
-   * @param cpu - объект CPU
-   */
+  private autoModeEnabled = false;
+
   constructor(os: OS) {
     this.os = os;
-    this.intervalId = null; // ID таймера
-    this.speed = appConfig.simulation.ticksPerSecond; // тактов в секунду
-    this.minSpeed = 0.1;
-    this.maxSpeed = 1000;
+
+    watch(
+      () => this.ticksPerSecond.value,
+      (newVal) => {
+        if (this.intervalId !== null) {
+          clearInterval(this.intervalId);
+          const interval = 1000 / newVal;
+          this.intervalId = window.setInterval(() => {
+            this.os.tick();
+            this.updateWorkingTime(interval);
+          }, interval);
+        }
+      },
+    );
   }
 
-  /**
-   * Запуск симуляции
-   */
   start() {
-    if (this.intervalId) return; // уже запущено
+    if (this.intervalId) return;
 
-    const interval = 1000 / this.speed; // миллисекунд между тактами
-    this.intervalId = setInterval(() => {
+    const interval = 1000 / this.ticksPerSecond.value;
+
+    this.intervalId = window.setInterval(() => {
       this.os.tick();
+      this.updateWorkingTime(interval);
     }, interval);
   }
 
-  /**
-   * Остановка симуляции
-   */
   stop() {
-    if (this.intervalId) {
-      clearInterval(this.intervalId);
-      this.intervalId = null;
+    this.clearInterval("intervalId");
+  }
+
+  reboot() {
+    this.stop();
+    this.clearInterval("autoIntervalId");
+
+    this.os.processTable.clearProcesses();
+    this.os.initialize();
+
+    this.workingTimeSeconds = 0;
+    this.elapsedMs = 0;
+
+    if (this.autoModeEnabled) this.enableAuto();
+  }
+
+  private updateWorkingTime(intervalMs: number) {
+    this.elapsedMs += intervalMs;
+    if (this.elapsedMs >= 1000) {
+      this.workingTimeSeconds++;
+      this.elapsedMs -= 1000;
     }
   }
 
-  /**
-   * Установить скорость (тактов в секунду)
-   */
-  setSpeed(speed: number) {
-    this.speed = Math.min(this.maxSpeed, Math.max(this.minSpeed, speed));
-    if (this.intervalId) {
-      this.stop();
-      this.start(); // перезапускаем таймер с новой скоростью
+  getWorkingTimeFormatted() {
+    const h = Math.floor(this.workingTimeSeconds / 3600);
+    const m = Math.floor((this.workingTimeSeconds % 3600) / 60);
+    const s = this.workingTimeSeconds % 60;
+    const pad = (n: number) => `${n}`.padStart(2, "0");
+
+    return `${pad(h)}:${pad(m)}:${pad(s)}`;
+  }
+
+  setAutoMode(enabled: boolean) {
+    if (this.autoModeEnabled === enabled) return;
+
+    this.autoModeEnabled = enabled;
+
+    if (enabled) {
+      this.enableAuto();
+    } else {
+      this.clearInterval("autoIntervalId");
     }
   }
 
-  /**
-   * Получить текущую скорость
-   */
-  getSpeed(): number {
-    return this.speed;
+  isAutoModeEnabled() {
+    return this.autoModeEnabled;
+  }
+
+  private enableAuto() {
+    if (this.autoIntervalId) return;
+
+    const intervalMs = 200;
+
+    this.autoIntervalId = window.setInterval(() => {
+      if (this.autoModeEnabled) this.tryAutoFill();
+    }, intervalMs);
+  }
+
+  private tryAutoFill() {
+    if (!this.os.processTable.hasSpace()) return;
+
+    try {
+      this.os.loadProcess();
+    } catch {
+      // Пробуем снова на следующем цикле
+    }
+  }
+
+  private clearInterval(name: "intervalId" | "autoIntervalId") {
+    const id = this[name];
+    if (id) {
+      clearInterval(id);
+      this[name] = null;
+    }
   }
 }

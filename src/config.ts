@@ -1,66 +1,46 @@
-// Системные параметры
+import { Ref, ref } from "vue";
+
 export type SystemConfig = {
-  // Общий объём памяти (в словах)
-  totalMemory: number;
-  // Максимальное количество процессов в системе (размер таблицы PSW)
-  maxProcesses: number;
+  totalMemory: Ref<number>;
+  maxProcesses: Ref<number>; // макс. кол-во процессов (размер таблицы процессов)
 };
 
-// Параметры генерации заданий (диапазоны ресурсов)
+export type CpuConfig = {
+  state: Ref<"IDLE" | "WORKING">;
+  ticksPerSecond: Ref<number>;
+  threadCount: Ref<number>; // кол-во одновременно выполняемых процессов
+};
+
 export type GeneratorConfig = {
-  // Минимальный размер памяти процесса (в словах)
-  minMemory: number;
-  // Максимальный размер памяти процесса (в словах)
-  maxMemory: number;
-  // Минимальное количество команд в задании
-  minInstructions: number;
-  // Максимальное количество команд в задании
-  maxInstructions: number;
+  minMemory: Ref<number>;
+  maxMemory: Ref<number>;
+  minInstructions: Ref<number>;
+  maxInstructions: Ref<number>;
 };
 
-// Параметры планировщика (относительные приоритеты)
 export type SchedulerConfig = {
-  // Квант времени (число тактов на одно назначение процесса)
-  quantum: number;
-  // Минимальный приоритет
-  minPriority: number;
-  // Максимальный приоритет
-  maxPriority: number;
-  // Базовый приоритет новых процессов
-  basePriority: number;
-  // Шаг «старения» приоритета для ожидающих процессов
-  agingStep: number;
-  // Штраф приоритета для выполнявшегося процесса при истечении кванта
-  runPenaltyStep: number;
-  // Каждые сколько тиков применять «старение» (интервал)
-  agingIntervalTicks?: number;
+  quantum: Ref<number>; // квант времени (число тактов на одно назначение процесса)
+  minPriority: Ref<number>;
+  maxPriority: Ref<number>;
+  basePriority: Ref<number>;
+  agingStep: Ref<number>; // шаг «старения» приоритета для ожидающих процессов
+  runPenaltyStep: Ref<number>; // штраф приоритета для выполнявшегося процесса при истечении кванта
+  agingIntervalTicks: Ref<number>;
+};
+
+export type CommandsConfig = {
+  computeProb: Ref<number>; // вероятность вычислительной команды (COMPUTE)
+  ioProb: Ref<number>; // вероятность I/O команды (IO)
+  errorProb: Ref<number>; // вероятность ошибочной команды (ERROR)
+  ioMinTime: Ref<number>; // минимальная длительность I/O (в тактах)
+  ioMaxTime: Ref<number>; // максимальная длительность I/O (в тактах)
 };
 
 export type AppConfig = {
-  system: SystemConfig;
-  generator: GeneratorConfig;
-  scheduler: SchedulerConfig;
-  // Параметры команд и задержек ввода/вывода
-  commands: {
-    // Вероятность вычислительной команды (COMPUTE)
-    computeProb: number;
-    // Вероятность I/O команды (IO)
-    ioProb: number;
-    // Вероятность ошибочной команды (ERROR)
-    errorProb: number;
-    // Минимальная длительность I/O (в тактах)
-    ioMinTime: number;
-    // Максимальная длительность I/O (в тактах)
-    ioMaxTime: number;
-  };
   // Параметры симуляции
   simulation: {
-    // Тактов симуляции в секунду
-    ticksPerSecond: number;
     // Через сколько тиков удалять завершённые процессы из таблицы
     removeTerminatedAfterTicks: number;
-    // Количество одновременно выполняемых процессов (потоков)
-    threadCount: number;
     // Накладные расходы ОС для расчёта T_mono (в тактах)
     overheads?: {
       loadTicks: number; // загрузка процесса
@@ -75,38 +55,47 @@ export type AppConfig = {
   };
 };
 
+const systemConfig: SystemConfig = {
+  totalMemory: ref(256),
+  maxProcesses: ref(32),
+};
+
+const cpuConfig: CpuConfig = {
+  state: ref("IDLE"),
+  ticksPerSecond: ref(50),
+  threadCount: ref(2),
+};
+
+const generatorConfig: GeneratorConfig = {
+  minMemory: ref(5),
+  maxMemory: ref(20),
+  minInstructions: ref(10),
+  maxInstructions: ref(200),
+};
+
+const schedulerConfig: SchedulerConfig = {
+  quantum: ref(4),
+  minPriority: ref(1),
+  maxPriority: ref(10),
+  basePriority: ref(5),
+  agingStep: ref(2),
+  runPenaltyStep: ref(3),
+  agingIntervalTicks: ref(3),
+};
+
+const commandsConfig: CommandsConfig = {
+  computeProb: ref(0.7),
+  ioProb: ref(0.2),
+  errorProb: ref(0.1),
+  ioMinTime: ref(2),
+  ioMaxTime: ref(4),
+};
+
 // Конфигурация по умолчанию для модели ОС
+
 const config: AppConfig = {
-  system: {
-    totalMemory: 256, // общий объём памяти (слова)
-    maxProcesses: 32, // размер таблицы PSW
-  },
-  generator: {
-    minMemory: 5, // мин. память процесса
-    maxMemory: 20, // макс. память процесса
-    minInstructions: 10, // мин. число команд
-    maxInstructions: 200, // макс. число команд
-  },
-  scheduler: {
-    quantum: 5, // длина кванта, тактов
-    minPriority: 1, // нижняя граница приоритета
-    maxPriority: 20, // верхняя граница приоритета
-    basePriority: 5, // базовый приоритет новых задач
-    agingStep: 1, // шаг старения для READY
-    runPenaltyStep: 3, // штраф после кванта
-    agingIntervalTicks: 5, // интервал старения (тика)
-  },
-  commands: {
-    computeProb: 0.7, // вероятность вычислительной команды
-    ioProb: 0.2, // вероятность I/O команды
-    errorProb: 0.1, // вероятность ошибочной команды
-    ioMinTime: 2, // мин. длительность I/O (такты)
-    ioMaxTime: 4, // макс. длительность I/O (такты)
-  },
   simulation: {
-    ticksPerSecond: 50, // тактов в секунду
-    removeTerminatedAfterTicks: 200, // задержка удаления завершённых (тик)
-    threadCount: 1, // количество потоков (одновременно выполняемых процессов)
+    removeTerminatedAfterTicks: 10, // задержка удаления завершённых (тик)
     overheads: {
       loadTicks: 2,
       terminateTicks: 1,
@@ -121,5 +110,10 @@ const config: AppConfig = {
 };
 
 export default config;
-
-
+export {
+  systemConfig,
+  cpuConfig,
+  generatorConfig,
+  schedulerConfig,
+  commandsConfig,
+};

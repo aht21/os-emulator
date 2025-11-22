@@ -1,12 +1,9 @@
-import Process from "./Process";
 import Command from "./Command";
+import Process from "./Process";
 
 export default class IOProcessor {
-  private ioQueue: Array<{ process: Process; command: Command; remaining: number }>;
-
-  constructor() {
-    this.ioQueue = [];
-  }
+  private ioQueue: { process: Process; command: Command; remaining: number }[] =
+    [];
 
   submitIO(process: Process, command: Command) {
     this.ioQueue.push({ process, command, remaining: command.executionTime });
@@ -14,20 +11,17 @@ export default class IOProcessor {
   }
 
   tick() {
-    for (const item of this.ioQueue) {
-      if (item.remaining > 0) item.remaining -= 1;
-    }
-    // Завершить готовые
-    const done: Array<{ process: Process; command: Command }> = [];
-    this.ioQueue = this.ioQueue.filter((it) => {
-      if (it.remaining <= 0) {
-        done.push({ process: it.process, command: it.command });
+    const done: { process: Process; command: Command }[] = [];
+
+    this.ioQueue = this.ioQueue.filter((item) => {
+      item.remaining--;
+      if (item.remaining <= 0) {
+        done.push({ process: item.process, command: item.command });
         return false;
       }
       return true;
     });
+
     return done;
   }
 }
-
-

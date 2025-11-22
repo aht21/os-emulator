@@ -56,10 +56,6 @@ export default class Command {
     return res;
   }
 
-  isComplete(): boolean {
-    return this.completed;
-  }
-
   getDescription(): string {
     if (this.type === "COMPUTE" && this.operation) {
       return `COMPUTE:${this.operation} [${this.operand1},${this.operand2}] -> ${this.resultAddr}`;
@@ -67,5 +63,3 @@ export default class Command {
     return this.type;
   }
 }
-
-

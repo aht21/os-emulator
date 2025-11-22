@@ -1,5 +1,5 @@
-import Memory from "./Memory";
 import Command from "./Command";
+import Memory from "./Memory";
 export type ProcessState =
   | "NEW"
   | "LOADING"
@@ -36,11 +36,6 @@ export default class Process {
   ioInterruptServiceTicks?: number; // обслуживание прерываний I/O
   contextSwitchOverheadTicks?: number; // все контекстные переключения для процесса
 
-  /**
-   * @param id - уникальный идентификатор процесса
-   * @param memorySize - размер памяти (в словах), требуемый процессу
-   * @param totalInstructions - общее количество команд (длина программы)
-   */
   constructor(
     id: number,
     memorySize: number,

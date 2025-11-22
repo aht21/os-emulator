@@ -1,18 +1,14 @@
+import appConfig from "../config.js";
+import { systemConfig, SystemConfig } from "../config.js";
 import CPU from "./CPU.js";
+import CommandGenerator from "./CommandGenerator.js";
+import IOProcessor from "./IOProcessor.js";
 import JobGenerator from "./JobGenerator.js";
 import MemoryManager from "./MemoryManager.js";
 import Process from "./Process.js";
 import ProcessTable from "./ProcessTable.js";
-import SimulationEngine from "./SimulationEngine.js";
 import Scheduler from "./Scheduler.js";
-import appConfig, { SchedulerConfig } from "../config.js";
-import CommandGenerator from "./CommandGenerator.js";
-import IOProcessor from "./IOProcessor.js";
-
-type Config = {
-  maxProcesses: number;
-  totalMemory: number;
-};
+import SimulationEngine from "./SimulationEngine.js";
 
 export default class OS {
   memoryManager: MemoryManager;
@@ -20,9 +16,8 @@ export default class OS {
   cpu: CPU;
   simEngine: SimulationEngine;
   jobGenerator: JobGenerator;
-  config: Config;
+  config: SystemConfig;
   scheduler: Scheduler;
-  schedulerConfig: SchedulerConfig;
   commandGenerator: CommandGenerator;
   ioProcessor: IOProcessor;
   private tickCounter: number;
@@ -39,16 +34,15 @@ export default class OS {
     lastExecuted: number[]; // последние до 16 PID
   };
 
-  constructor(config: Config) {
-    this.memoryManager = new MemoryManager(config.totalMemory);
-    this.processTable = new ProcessTable(config.maxProcesses);
-    this.cpu = new CPU(appConfig.simulation.threadCount);
+  constructor() {
+    this.memoryManager = new MemoryManager();
+    this.processTable = new ProcessTable(systemConfig.maxProcesses.value);
+    this.cpu = new CPU();
     this.simEngine = new SimulationEngine(this);
     this.jobGenerator = new JobGenerator();
 
-    this.config = config; // для UI и диапазонов генерации
-    this.schedulerConfig = appConfig.scheduler;
-    this.scheduler = new Scheduler(this.schedulerConfig);
+    this.config = systemConfig; // для UI и диапазонов генерации
+    this.scheduler = new Scheduler();
     this.commandGenerator = new CommandGenerator();
     this.ioProcessor = new IOProcessor();
     this.tickCounter = 0;
@@ -70,12 +64,12 @@ export default class OS {
    * Инициализация модели
    */
   initialize() {
-    this.processTable = new ProcessTable(this.config.maxProcesses);
-    this.memoryManager = new MemoryManager(this.config.totalMemory);
-    this.cpu = new CPU(appConfig.simulation.threadCount);
+    this.processTable = new ProcessTable(this.config.maxProcesses.value);
+    this.memoryManager = new MemoryManager();
+    this.cpu = new CPU();
     this.simEngine = new SimulationEngine(this);
     this.jobGenerator = new JobGenerator();
-    this.scheduler = new Scheduler(this.schedulerConfig);
+    this.scheduler = new Scheduler();
     this.commandGenerator = new CommandGenerator();
     this.ioProcessor = new IOProcessor();
     this.tickCounter = 0;
@@ -94,139 +88,13 @@ export default class OS {
   }
 
   /**
-   * Генерация нового процесса
-   */
-  generateJob(
-    minMemory: number,
-    maxMemory: number,
-    minInstructions: number,
-    maxInstructions: number,
-  ): Process {
-    const process = this.jobGenerator.generateProcess(
-      minMemory,
-      maxMemory,
-      minInstructions,
-      maxInstructions,
-    );
-    return process;
-  }
-
-  /**
-   * Загрузка процесса в систему
-   */
-  loadProcess(process: Process) {
-    // Проверяем наличие места в таблице и достаточной памяти
-    if (!this.processTable.hasSpace()) {
-      throw new Error("Таблица процессов заполнена!");
-    }
-    if (!this.memoryManager.hasSpace(process.memorySize)) {
-      throw new Error("Недостаточно памяти для загрузки процесса!");
-    }
-
-    // Выделяем память, подготавливаем процесс и добавляем в таблицу
-    this.memoryManager.allocate(process.memorySize);
-    process.setReady();
-    this.processTable.addProcess(process);
-    this.scheduler.onProcessReady(process);
-    process.arrivalTick = this.tickCounter;
-
-    // Накладные расходы: загрузка
-    const ovh = appConfig.simulation.overheads;
-    if (ovh) {
-      process.contextSwitchOverheadTicks =
-        (process.contextSwitchOverheadTicks || 0) + ovh.loadTicks;
-      this.increaseReadyProcessesTime(ovh.loadTicks);
-    }
-
-    // Если CPU имеет свободные потоки, назначаем этот процесс
-    if (this.cpu.hasSpace()) {
-      const q = this.schedulerConfig.quantum;
-      this.cpu.setProcess(process, q);
-    }
-  }
-
-  /**
-   * Завершить симуляцию: останавливаем движок, очищаем память и таблицу
-   */
-  terminateSimulation() {
-    this.simEngine.stop();
-    // Освобождаем память всех процессов
-    this.processTable.getProcesses().forEach((p) => {
-      this.memoryManager.free(p.memorySize);
-    });
-    this.processTable = new ProcessTable(this.config.maxProcesses);
-    this.cpu = new CPU();
-  }
-
-  /**
-   * Установить скорости симуляции
-   */
-  setSpeed(speedVal: number) {
-    this.simEngine.setSpeed(speedVal);
-  }
-
-  /**
-   * Получить справку
-   */
-  getHelp() {
-    return `
-      Доступные команды:
-      - Завершить моделирование
-      - Увеличить скорость на 5-10%
-      - Уменьшить скорость на 5-10%
-      - /? - показать справку
-    `;
-  }
-
-  /**
-   * Экспорт состояния модели (для JSON)
-   */
-  exportState() {
-    const state = {
-      processes: this.processTable.getProcesses().map((p) => ({
-        id: p.id,
-        pc: p.pc,
-        memorySize: p.memorySize,
-        totalInstructions: p.totalInstructions,
-        state: p.state,
-      })),
-      freeMemory: this.memoryManager.getFreeMemory(),
-      speed: this.simEngine.getSpeed(),
-    };
-    return JSON.stringify(state, null, 2);
-  }
-
-  /**
-   * Импорт состояния модели из JSON
-   */
-  importState(json: string) {
-    const state = JSON.parse(json);
-    this.initialize();
-
-    state.processes.forEach((pData: Process) => {
-      const proc = new Process(
-        pData.id,
-        pData.memorySize,
-        pData.totalInstructions,
-      );
-      proc.pc = pData.pc;
-      proc.state = pData.state;
-
-      this.memoryManager.allocate(proc.memorySize);
-      this.processTable.addProcess(proc);
-    });
-
-    this.simEngine.setSpeed(state.speed);
-  }
-
-  /**
    * Выполняет один такт симуляции
    */
   tick() {
     this.tickCounter += 1;
     this.metrics.totalTicks += 1;
     const activeProcesses = this.cpu.getAllActiveProcesses();
-    
+
     // Обработка всех активных процессов
     for (const process of activeProcesses) {
       // учёт начала обслуживания
@@ -236,7 +104,9 @@ export default class OS {
 
       // Сгенерировать команду, если её нет
       if (!process.currentCommand) {
-        process.setCurrentCommand(this.commandGenerator.generateCommand(process));
+        process.setCurrentCommand(
+          this.commandGenerator.generateCommand(process),
+        );
       }
 
       // Обработка команд
@@ -276,21 +146,7 @@ export default class OS {
     }
 
     // Если CPU имеет свободные потоки — выбрать следующие процессы
-    while (this.cpu.hasSpace()) {
-      const next = this.scheduler.getNextProcessForCPU();
-      if (!next) break;
-      
-      // Накладные расходы: переключение READY -> RUNNING
-      const ovh = appConfig.simulation.overheads;
-      if (ovh) {
-        next.contextSwitchOverheadTicks =
-          (next.contextSwitchOverheadTicks || 0) + ovh.ctxReadyToActive;
-        this.increaseReadyProcessesTime(ovh.ctxReadyToActive);
-      }
-
-      next.setReady();
-      this.cpu.setProcess(next, this.schedulerConfig.quantum);
-    }
+    this.scheduleReadyProcesses();
 
     // Учет ожидания для всех READY
     this.processTable
@@ -308,9 +164,7 @@ export default class OS {
         this.metrics.lastExecuted.push(p.id);
       }
       if (this.metrics.lastExecuted.length > 16) {
-        this.metrics.lastExecuted = this.metrics.lastExecuted.slice(
-          -16,
-        );
+        this.metrics.lastExecuted = this.metrics.lastExecuted.slice(-16);
       }
     }
 
@@ -323,7 +177,9 @@ export default class OS {
           this.processTable.removeProcess(r.id);
           this.memoryManager.free(r.size);
         }
-        this.pendingRemoval = this.pendingRemoval.filter((x) => x.removeAt > now);
+        this.pendingRemoval = this.pendingRemoval.filter(
+          (x) => x.removeAt > now,
+        );
       }
     }
   }
@@ -340,7 +196,8 @@ export default class OS {
       this.increaseReadyProcessesTime(ovh.ctxActiveToBlocked + ovh.ioInitTicks);
     }
     if ((cmd as any).executionTime) {
-      process.ioBusyTicks = (process.ioBusyTicks || 0) + (cmd as any).executionTime;
+      process.ioBusyTicks =
+        (process.ioBusyTicks || 0) + (cmd as any).executionTime;
     }
 
     // Отправить в I/O и снять с ЦП
@@ -357,7 +214,9 @@ export default class OS {
         (process.ioInterruptServiceTicks || 0) + ovh.ioInterruptServiceTicks;
       process.contextSwitchOverheadTicks =
         (process.contextSwitchOverheadTicks || 0) + ovh.ctxBlockedToReady;
-      this.increaseReadyProcessesTime(ovh.ioInterruptServiceTicks + ovh.ctxBlockedToReady);
+      this.increaseReadyProcessesTime(
+        ovh.ioInterruptServiceTicks + ovh.ctxBlockedToReady,
+      );
     }
     process.setReady();
     this.scheduler.onProcessReady(process);
@@ -386,7 +245,8 @@ export default class OS {
     this.scheduler.onProcessTerminated(process);
     this.pendingRemoval.push({
       id: process.id,
-      removeAt: this.tickCounter + appConfig.simulation.removeTerminatedAfterTicks,
+      removeAt:
+        this.tickCounter + appConfig.simulation.removeTerminatedAfterTicks,
       size: process.memorySize,
     });
     // Метрики завершения
@@ -397,6 +257,23 @@ export default class OS {
       this.metrics.sumWaiting += process.waitTicks;
       this.metrics.sumService += process.runTicks;
       process.endTick = this.tickCounter;
+    }
+  }
+
+  private scheduleReadyProcesses() {
+    while (this.cpu.hasFreeThreads()) {
+      const next = this.scheduler.getNextProcessForCPU();
+      if (!next) break;
+
+      const ovh = appConfig.simulation.overheads;
+      if (ovh) {
+        next.contextSwitchOverheadTicks =
+          (next.contextSwitchOverheadTicks || 0) + ovh.ctxReadyToActive;
+        this.increaseReadyProcessesTime(ovh.ctxReadyToActive);
+      }
+
+      next.setReady();
+      this.cpu.setProcess(next);
     }
   }
 
@@ -464,17 +341,20 @@ export default class OS {
       const ctx = p.contextSwitchOverheadTicks || 0;
       const load = ovh ? ovh.loadTicks : 0;
       const term = ovh ? ovh.terminateTicks : 0;
-      const tMono = p.totalInstructions + ioBusy + ioInit + ioIsr + ctx + load + term;
+      const tMono =
+        p.totalInstructions + ioBusy + ioInit + ioIsr + ctx + load + term;
       return { pid: p.id, T_multi: tMulti, T_mono: tMono };
     });
     const avgMono =
       details.length > 0
-        ? details.reduce((s, d) => s += d.T_mono, 0) / details.length
+        ? details.reduce((s, d) => (s += d.T_mono), 0) / details.length
         : 0;
-    const possibleMonoCompleted = avgMono > 0 ? this.metrics.totalTicks / avgMono : 0;
-    const performancePercent = possibleMonoCompleted > 0
-      ? (this.metrics.completedCount / possibleMonoCompleted) * 100
-      : 0;
+    const possibleMonoCompleted =
+      avgMono > 0 ? this.metrics.totalTicks / avgMono : 0;
+    const performancePercent =
+      possibleMonoCompleted > 0
+        ? (this.metrics.completedCount / possibleMonoCompleted) * 100
+        : 0;
     return {
       completedCount: this.metrics.completedCount,
       totalTicks: this.metrics.totalTicks,
@@ -497,7 +377,8 @@ export default class OS {
       const ctx = p.contextSwitchOverheadTicks || 0;
       const load = ovh ? ovh.loadTicks : 0;
       const term = ovh ? ovh.terminateTicks : 0;
-      const tMono = p.totalInstructions + ioBusy + ioInit + ioIsr + ctx + load + term;
+      const tMono =
+        p.totalInstructions + ioBusy + ioInit + ioIsr + ctx + load + term;
       // T_multi = время нахождения в системе (от загрузки до завершения или текущий момент)
       let tMulti: number | undefined;
       if (p.arrivalTick !== undefined) {
@@ -525,40 +406,6 @@ export default class OS {
         T_multi: tMulti,
       };
     });
-  }
-
-  /**
-   * Проверка возможности загрузки процесса заданного размера
-   */
-  canLoad(size: number): boolean {
-    return this.processTable.hasSpace() && this.memoryManager.hasSpace(size);
-  }
-
-  /**
-   * Начальная загрузка: генерировать и загружать процессы, пока хватает памяти/места
-   */
-  initialLoad(
-    minMemory: number,
-    maxMemory: number,
-    minInstructions: number,
-    maxInstructions: number,
-  ) {
-    // Бесконечный поток задач с остановкой по ресурсу
-    // Защита от потенциального бесконечного цикла при слишком больших мин. требованиях
-    const safetyLimit = this.config.maxProcesses * 10;
-    let attempts = 0;
-    while (attempts < safetyLimit) {
-      attempts += 1;
-      if (!this.processTable.hasSpace()) break;
-      const candidate = this.generateJob(
-        minMemory,
-        maxMemory,
-        minInstructions,
-        maxInstructions,
-      );
-      if (!this.canLoad(candidate.memorySize)) break;
-      this.loadProcess(candidate);
-    }
   }
 
   /**
@@ -595,5 +442,52 @@ export default class OS {
         canLoad: "canLoad(size) = free >= size",
       },
     };
+  }
+
+  // Процессы
+
+  generateJob(): Process {
+    return this.jobGenerator.generateProcess();
+  }
+
+  loadProcess(proc?: Process) {
+    const process = proc ?? this.generateJob();
+
+    if (!this.processTable.hasSpace()) {
+      throw new Error("Таблица процессов заполнена!");
+    }
+    if (!this.memoryManager.hasSpace(process.memorySize)) {
+      throw new Error("Недостаточно памяти для загрузки процесса!");
+    }
+
+    this.memoryManager.allocate(process.memorySize);
+    process.setReady();
+    this.processTable.addProcess(process);
+    this.scheduler.onProcessReady(process);
+    process.arrivalTick = this.tickCounter;
+
+    return process;
+  }
+
+  initialLoad() {
+    const safetyLimit = this.config.maxProcesses.value * 10;
+    let attempts = 0;
+
+    while (attempts < safetyLimit) {
+      attempts++;
+
+      if (!this.processTable.hasSpace()) break;
+
+      const candidate = this.generateJob();
+
+      if (!this.memoryManager.hasSpace(candidate.memorySize)) break;
+
+      this.loadProcess(candidate);
+    }
+  }
+
+  clearProcesses() {
+    this.processTable.processes.value = [];
+    this.memoryManager.free(Infinity);
   }
 }
