@@ -2,6 +2,7 @@
 import AppWidget from "./AppWidget.vue";
 import WidgetCPU from "./WidgetCPU.vue";
 import WidgetMemory from "./WidgetMemory.vue";
+import WidgetPerformance from "./WidgetPerformance.vue";
 import WidgetProcessTable from "./WidgetProcessTable.vue";
 import WidgetSimulation from "./WidgetSimulation.vue";
 </script>
@@ -20,7 +21,9 @@ import WidgetSimulation from "./WidgetSimulation.vue";
     <AppWidget name="memory" class="memory">
       <WidgetMemory />
     </AppWidget>
-    <AppWidget name="performance" class="performance"></AppWidget>
+    <AppWidget name="performance" class="performance">
+      <WidgetPerformance />
+    </AppWidget>
   </div>
 </template>
 

@@ -5,20 +5,20 @@ export type SystemConfig = {
   maxProcesses: Ref<number>; // макс. кол-во процессов (размер таблицы процессов)
 };
 
-export type CpuConfig = {
+type CpuConfig = {
   state: Ref<"IDLE" | "WORKING">;
   ticksPerSecond: Ref<number>;
   threadCount: Ref<number>; // кол-во одновременно выполняемых процессов
 };
 
-export type GeneratorConfig = {
+type GeneratorConfig = {
   minMemory: Ref<number>;
   maxMemory: Ref<number>;
   minInstructions: Ref<number>;
   maxInstructions: Ref<number>;
 };
 
-export type SchedulerConfig = {
+type SchedulerConfig = {
   quantum: Ref<number>; // квант времени (число тактов на одно назначение процесса)
   minPriority: Ref<number>;
   maxPriority: Ref<number>;
@@ -28,12 +28,17 @@ export type SchedulerConfig = {
   agingIntervalTicks: Ref<number>;
 };
 
-export type CommandsConfig = {
+type CommandsConfig = {
   computeProb: Ref<number>; // вероятность вычислительной команды (COMPUTE)
   ioProb: Ref<number>; // вероятность I/O команды (IO)
   errorProb: Ref<number>; // вероятность ошибочной команды (ERROR)
   ioMinTime: Ref<number>; // минимальная длительность I/O (в тактах)
   ioMaxTime: Ref<number>; // максимальная длительность I/O (в тактах)
+};
+
+type SimulationConfig = {
+  removeTerminatedAfterTicks: Ref<number>;
+  generateProcessInterval: Ref<number>; // интервал генерации нового процесса для auto мода
 };
 
 export type AppConfig = {
@@ -91,6 +96,11 @@ const commandsConfig: CommandsConfig = {
   ioMaxTime: ref(4),
 };
 
+const simulationConfig: SimulationConfig = {
+  removeTerminatedAfterTicks: ref(10),
+  generateProcessInterval: ref(100),
+};
+
 // Конфигурация по умолчанию для модели ОС
 
 const config: AppConfig = {
@@ -116,4 +126,5 @@ export {
   generatorConfig,
   schedulerConfig,
   commandsConfig,
+  simulationConfig,
 };

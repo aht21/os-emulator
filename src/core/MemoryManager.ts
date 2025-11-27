@@ -1,5 +1,5 @@
 import { ref, computed } from "vue";
-import { systemConfig } from "../config";
+import { systemConfig } from "./config";
 
 export default class MemoryManager {
   totalMemory = systemConfig.totalMemory;
@@ -24,9 +24,5 @@ export default class MemoryManager {
     if (this.filledMemory.value < 0) {
       this.filledMemory.value = 0;
     }
-  }
-
-  getFreeMemory(): number {
-    return this.freeMemory.value;
   }
 }

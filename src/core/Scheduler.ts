@@ -1,18 +1,22 @@
-import { schedulerConfig } from "../config";
 import Process from "./Process";
+import { schedulerConfig } from "./config";
 
 export default class Scheduler {
   private readyQueue: Process[] = [];
+
   runPenaltyStep = schedulerConfig.runPenaltyStep;
   minPriority = schedulerConfig.minPriority;
   maxPriority = schedulerConfig.maxPriority;
   agingStep = schedulerConfig.agingStep;
   agingIntervalTicks = schedulerConfig.agingIntervalTicks;
+
   private tickCounter = 0;
 
   onProcessReady(p: Process) {
     if (!this.readyQueue.some((q) => q.id === p.id)) {
+      p.setReady(); // Гарантируем состояние READY
       this.readyQueue.push(p);
+      // Сортируем только при добавлении, чтобы очередь всегда была готова
       this.sortQueue();
     }
   }
@@ -26,14 +30,14 @@ export default class Scheduler {
 
   onQuantumExpired(p: Process) {
     p.applyRunPenalty(this.runPenaltyStep.value, this.minPriority.value);
-    p.setReady();
-    this.readyQueue.push(p);
-    this.sortQueue();
+
+    this.onProcessReady(p);
   }
 
   tickAging() {
     this.tickCounter++;
     const interval = this.agingIntervalTicks.value || 1;
+
     if (this.tickCounter % interval === 0) {
       for (const p of this.readyQueue) {
         p.applyAging(this.agingStep.value, this.maxPriority.value);
@@ -44,12 +48,13 @@ export default class Scheduler {
 
   getNextProcessForCPU(): Process | null {
     if (this.readyQueue.length === 0) return null;
-    this.sortQueue();
-    return this.readyQueue.shift() ?? null;
+
+    const nextProc = this.readyQueue.shift();
+    return nextProc ?? null;
   }
 
   private sortQueue() {
-    this.readyQueue.sort((a, b) => b.dynamicPriority - a.dynamicPriority); // Высший приоритет сначала
+    this.readyQueue.sort((a, b) => b.dynamicPriority - a.dynamicPriority);
   }
 
   getReadyCount(): number {

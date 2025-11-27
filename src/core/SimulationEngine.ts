@@ -1,12 +1,13 @@
 import { watch } from "vue";
-import { cpuConfig } from "../config";
 import OS from "./OS";
+import { cpuConfig, simulationConfig } from "./config";
 
 export default class SimulationEngine {
   os: OS;
   intervalId: number | null = null;
   autoIntervalId: number | null = null;
   ticksPerSecond = cpuConfig.ticksPerSecond;
+  generateProcessInterval = simulationConfig.generateProcessInterval;
   workingTimeSeconds = 0;
   private elapsedMs = 0;
 
@@ -94,11 +95,9 @@ export default class SimulationEngine {
   private enableAuto() {
     if (this.autoIntervalId) return;
 
-    const intervalMs = 200;
-
     this.autoIntervalId = window.setInterval(() => {
       if (this.autoModeEnabled) this.tryAutoFill();
-    }, intervalMs);
+    }, this.generateProcessInterval.value);
   }
 
   private tryAutoFill() {

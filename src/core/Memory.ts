@@ -28,10 +28,4 @@ export default class Memory {
   getSize(): number {
     return this.size;
   }
-
-  initialize(): void {
-    this.words.fill(0);
-  }
 }
-
-
