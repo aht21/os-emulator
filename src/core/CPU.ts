@@ -1,6 +1,6 @@
 import { ref } from "vue";
-import { cpuConfig } from "../config";
 import Process from "./Process";
+import { cpuConfig } from "./config";
 
 export default class CPU {
   activeProcesses = ref<Process[]>([]);
@@ -32,6 +32,11 @@ export default class CPU {
     }
   }
 
+  clearAll() {
+    this.activeProcesses.value = [];
+    this.state.value = "IDLE";
+  }
+
   tick() {
     for (let i = this.activeProcesses.value.length - 1; i >= 0; i--) {
       const process = this.activeProcesses.value[i];
@@ -47,12 +52,6 @@ export default class CPU {
     }
   }
 
-  getCurrentProcess(): Process | null {
-    return this.activeProcesses.value.length > 0
-      ? (this.activeProcesses.value[0] as Process)
-      : null;
-  }
-
   getAllActiveProcesses(): Process[] {
     return [...this.activeProcesses.value] as Process[];
   }
@@ -63,13 +62,5 @@ export default class CPU {
 
   hasFreeThreads(): boolean {
     return this.activeProcesses.value.length < this.threadCount.value;
-  }
-
-  setMaxThreads(count: number) {
-    this.threadCount.value = Math.max(1, Math.floor(count));
-  }
-
-  getMaxThreads(): number {
-    return this.threadCount.value;
   }
 }

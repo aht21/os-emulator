@@ -29,6 +29,7 @@ export default class Process {
   startTick?: number;
   endTick?: number;
   runTicks: number;
+  blockedTicks: number;
   waitTicks: number;
   // detailed accounting for mono-time estimation
   ioBusyTicks?: number; // суммарное «занятость» I/O для процесса
@@ -56,6 +57,7 @@ export default class Process {
     this.memory = new Memory(memorySize);
     this.currentCommand = null;
     this.runTicks = 0;
+    this.blockedTicks = 0;
     this.waitTicks = 0;
     this.ioBusyTicks = 0;
     this.ioInitOverheadTicks = 0;

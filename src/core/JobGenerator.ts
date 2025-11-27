@@ -1,5 +1,5 @@
-import { generatorConfig, schedulerConfig } from "../config";
 import Process from "./Process";
+import { generatorConfig, schedulerConfig } from "./config";
 
 export default class JobGenerator {
   counter = 0;

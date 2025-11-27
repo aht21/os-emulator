@@ -1,6 +1,6 @@
-import { commandsConfig } from "../config";
 import Command, { CommandType, Operation } from "./Command";
 import Process from "./Process";
+import { commandsConfig } from "./config";
 
 export default class CommandGenerator {
   computeProb = commandsConfig.computeProb;

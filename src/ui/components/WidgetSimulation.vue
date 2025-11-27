@@ -41,10 +41,15 @@ watch(autoMode, (v) => sim.setAutoMode(v === "on"), { immediate: true });
       />
     </div>
 
-    <div class="buttons_group">
-      <button class="btn" @click="sim.start">start</button>
-      <button class="btn" @click="sim.stop">stop</button>
-      <button class="btn" @click="sim.reboot">reboot</button>
+    <div class="second_group">
+      <div class="buttons_line">
+        <button class="btn" @click="sim.start">start</button>
+        <button class="btn" @click="sim.stop">stop</button>
+        <button class="btn" @click="sim.reboot">reboot</button>
+      </div>
+      <button class="btn" @click="os.randomizeSystemParams">
+        randomize parameters
+      </button>
     </div>
   </div>
 </template>
@@ -65,7 +70,13 @@ watch(autoMode, (v) => sim.setAutoMode(v === "on"), { immediate: true });
   gap: 1rem;
 }
 
-.buttons_group {
+.second_group {
+  display: flex;
+  flex-direction: column;
+  gap: 0.5rem;
+}
+
+.buttons_line {
   display: flex;
   justify-content: space-between;
   gap: 0.5rem;

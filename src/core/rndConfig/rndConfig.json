@@ -1,0 +1,36 @@
+{
+  "system": {
+    "totalMemory": [128, 1024],
+    "maxProcesses": [10, 64]
+  },
+  "cpu": {
+    "ticksPerSecond": [10, 100],
+    "threadCount": [1, 2, 4]
+  },
+  "generator": {
+    "minMemory": [2, 10],
+    "maxMemory": [20, 64],
+    "minInstructions": [5, 20],
+    "maxInstructions": [100, 500]
+  },
+  "scheduler": {
+    "quantum": [2, 10],
+    "priorityRange": [1, 20],
+    "agingStep": [1, 5],
+    "runPenaltyStep": [1, 5],
+    "agingIntervalTicks": [2, 10]
+  },
+  "commands": {
+    "ioMinTime": [1, 5],
+    "ioMaxTime": [5, 15],
+    "weights": {
+      "compute": [50, 90],
+      "io": [10, 40],
+      "error": [1, 10]
+    }
+  },
+  "simulation": {
+    "removeTerminatedAfterTicks": [5, 20],
+    "generateProcessInterval": [50, 200]
+  }
+}

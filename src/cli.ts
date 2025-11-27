@@ -1,14 +1,15 @@
 import readline from "readline";
+import OS from "./core/OS";
 import {
   cpuConfig,
   generatorConfig,
   schedulerConfig,
   systemConfig,
-} from "./config";
-import OS from "./core/OS";
+} from "./core/config";
 
 const os = new OS();
 
+// Используем SetInterval<any> для TypeScript, если ReturnType<typeof setInterval> вызывает ошибку
 let psInterval: ReturnType<typeof setInterval> | null = null;
 
 function renderPS() {
@@ -47,7 +48,7 @@ const helpText = `
 - Каждый READY-процесс стареет: priority += agingStep (до maxPriority)
 - RUNNING получает штраф: priority -= runPenaltyStep (до minPriority)
 - Выбор: процесс с максимальным dynamicPriority
-- Квант: ${schedulerConfig.quantum} тактов; по исчерпании — возврат в READY
+- Квант: ${schedulerConfig.quantum.value} тактов; по исчерпании — возврат в READY
 `;
 
 console.log("OS Emulator (CLI mode)");
@@ -57,6 +58,18 @@ rl.prompt();
 
 rl.on("line", (line) => {
   const cmd = line.trim();
+
+  // Очистка интервала при смене режима
+  if (
+    psInterval &&
+    cmd !== "/ps" &&
+    cmd !== "/screen" &&
+    cmd !== "/analysis" &&
+    cmd !== "/perf"
+  ) {
+    clearInterval(psInterval);
+    psInterval = null;
+  }
 
   switch (cmd) {
     case "/start":
@@ -102,6 +115,12 @@ rl.on("line", (line) => {
       const renderScreen = () => {
         console.clear();
         console.log("Модель ОС — Индикация параметров\n");
+
+        // --- Получение данных ---
+        const active = os.cpu.getAllActiveProcesses();
+        const stats = os.getSystemParams();
+        // ---
+
         // Постоянная информация
         console.log(
           "Постоянно: Алгоритм — Относительные приоритеты; Управление — /start, /stop, /ps, /screen, /mem, /?\n",
@@ -113,16 +132,14 @@ rl.on("line", (line) => {
         // Параметры генератора
         const gen = generatorConfig;
         console.log(
-          `Задание: Память[${gen.minMemory}-${gen.maxMemory}], Команды[${gen.minInstructions}-${gen.maxInstructions}]`,
+          `Задание: Память[${gen.minMemory.value}-${gen.maxMemory.value}], Команды[${gen.minInstructions.value}-${gen.maxInstructions.value}]`,
         );
         // Параметры планировщика
         const sch = schedulerConfig;
         console.log(
-          `Планировщик: квант=${sch.quantum}, приоритет[${sch.minPriority}-${sch.maxPriority}], agingStep=${sch.agingStep}/${sch.agingIntervalTicks}, penalty=${sch.runPenaltyStep}`,
+          `Планировщик: квант=${sch.quantum.value}, приоритет[${sch.minPriority.value}-${sch.maxPriority.value}], agingStep=${sch.agingStep.value}/${sch.agingIntervalTicks.value}, penalty=${sch.runPenaltyStep.value}`,
         );
         // Параметры CPU
-        const active = os.cpu.getAllActiveProcesses();
-        const stats = os.getSystemParams();
         console.log(
           `CPU: состояние=${os.cpu.state}, активных=${active.length}/${os.cpu.maxThreads}, утилизация=${(stats.cpuUtilization * 100).toFixed(1)}%`,
         );
@@ -131,8 +148,12 @@ rl.on("line", (line) => {
           `Последние процессы: ${stats.lastExecuted.join(", ") || "-"}`,
         );
         // Очереди/средние
+        // !!! ИСПРАВЛЕНО: Обращение к stats.completedCount через .value (если это реактивное свойство)
+        const completed = stats.completedProcessesCount
+          ? stats.completedProcessesCount.value
+          : stats.completedCount;
         console.log(
-          `Очередь READY(avg)=${stats.avgReadyLen.toFixed(2)}, Выполнено=${stats.completed}, AvgWait=${stats.avgWaiting.toFixed(2)}, AvgTurn=${stats.avgTurnaround.toFixed(2)}, Throughput=${stats.throughputPerTick.toFixed(3)} per tick\n`,
+          `Очередь READY(avg)=${stats.avgReadyLen.toFixed(2)}, Выполнено=${completed}, AvgWait=${stats.avgWaiting.toFixed(2)}, AvgTurn=${stats.avgTurnaround.toFixed(2)}, Throughput=${stats.throughputPerTick.toFixed(3)} per tick\n`,
         );
         // Таблица процессов (все параметры на одном окне)
         console.table(
@@ -153,8 +174,10 @@ rl.on("line", (line) => {
           })),
         );
       };
-      renderScreen();
+      // Остановка предыдущего интервала, если он был
       if (psInterval) clearInterval(psInterval);
+
+      renderScreen();
       psInterval = setInterval(renderScreen, 500);
       break;
     }
@@ -219,11 +242,17 @@ rl.on("line", (line) => {
           "Производительность (auto-refresh): /perf снова — остановка\n",
         );
         const perf = os.getMonoMultiMetrics();
+
+        // !!! ИСПРАВЛЕНО: Обращение к completedCount через .value
+        const completedCount = perf.completedProcessesCount
+          ? perf.completedProcessesCount.value
+          : perf.completedCount;
+
         console.log(
-          `Ticks=${perf.totalTicks}, Completed=${perf.completedCount}, Avg T_mono=${perf.avgTmono.toFixed(2)} такт.`,
+          `Ticks=${perf.totalTicks}, Completed=${completedCount}, Avg T_mono=${perf.avgTmono.toFixed(2)} такт.`,
         );
         console.log(
-          `Моно-возможные завершения: ${perf.monoPossibleCompleted.toFixed(2)}; Фактически завершено: ${perf.completedCount}`,
+          `Моно-возможные завершения: ${perf.monoPossibleCompleted.toFixed(2)}; Фактически завершено: ${completedCount}`,
         );
         console.log(
           `Производительность (к мультипрограммированию): ${perf.performancePercent.toFixed(1)}%`,
