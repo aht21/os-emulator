@@ -3,6 +3,7 @@ import AppWidget from "./AppWidget.vue";
 import WidgetCPU from "./WidgetCPU.vue";
 import WidgetMemory from "./WidgetMemory.vue";
 import WidgetPerformance from "./WidgetPerformance.vue";
+import WidgetProcessGenerator from "./WidgetProcessGenerator.vue";
 import WidgetProcessTable from "./WidgetProcessTable.vue";
 import WidgetSimulation from "./WidgetSimulation.vue";
 </script>
@@ -24,6 +25,9 @@ import WidgetSimulation from "./WidgetSimulation.vue";
     <AppWidget name="performance" class="performance">
       <WidgetPerformance />
     </AppWidget>
+    <AppWidget name="process generator" class="process_generator">
+      <WidgetProcessGenerator />
+    </AppWidget>
   </div>
 </template>
 
@@ -34,7 +38,7 @@ import WidgetSimulation from "./WidgetSimulation.vue";
   grid-template-areas:
     "simulation cpu process_table process_table"
     "memory memory process_table process_table"
-    "performance performance . .";
+    "performance performance process_generator process_generator";
   padding: 2rem 0;
   grid-template-columns: repeat(4, 1fr);
   grid-template-rows: 3fr 3fr 4fr;
@@ -59,5 +63,9 @@ import WidgetSimulation from "./WidgetSimulation.vue";
 
 .performance {
   grid-area: performance;
+}
+
+.process_generator {
+  grid-area: process_generator;
 }
 </style>

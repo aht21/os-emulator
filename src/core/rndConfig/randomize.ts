@@ -6,7 +6,7 @@ import {
   commandsConfig,
   simulationConfig,
 } from "../config";
-import preset from "./rndConfig.json"; // Импорт JSON пресета
+import preset from "./rndConfig.json";
 
 /**
  * Утилита для получения случайного целого числа в диапазоне [min, max]
