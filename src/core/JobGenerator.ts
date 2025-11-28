@@ -2,18 +2,22 @@ import Process from "./Process";
 import { generatorConfig, schedulerConfig } from "./config";
 
 export default class JobGenerator {
+  minMemory = generatorConfig.minMemory;
+  maxMemory = generatorConfig.maxMemory;
+  minInstructions = generatorConfig.minInstructions;
+  maxInstructions = generatorConfig.maxInstructions;
   counter = 0;
 
   generateProcess(): Process {
-    const { minMemory, maxMemory, minInstructions, maxInstructions } =
-      generatorConfig;
-
     this.counter += 1;
     const pid = this.counter;
-    const memorySize = this.getRandomInt(minMemory.value, maxMemory.value);
+    const memorySize = this.getRandomInt(
+      this.minMemory.value,
+      this.maxMemory.value,
+    );
     const totalInstructions = this.getRandomInt(
-      minInstructions.value,
-      maxInstructions.value,
+      this.minInstructions.value,
+      this.maxInstructions.value,
     );
     const { minPriority, maxPriority, basePriority } = schedulerConfig;
     const randomPriority =

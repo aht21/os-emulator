@@ -44,8 +44,6 @@ type SimulationConfig = {
 export type AppConfig = {
   // Параметры симуляции
   simulation: {
-    // Через сколько тиков удалять завершённые процессы из таблицы
-    removeTerminatedAfterTicks: number;
     // Накладные расходы ОС для расчёта T_mono (в тактах)
     overheads?: {
       loadTicks: number; // загрузка процесса
@@ -67,7 +65,7 @@ const systemConfig: SystemConfig = {
 
 const cpuConfig: CpuConfig = {
   state: ref("IDLE"),
-  ticksPerSecond: ref(50),
+  ticksPerSecond: ref(10),
   threadCount: ref(2),
 };
 
@@ -89,10 +87,10 @@ const schedulerConfig: SchedulerConfig = {
 };
 
 const commandsConfig: CommandsConfig = {
-  computeProb: ref(0.7),
-  ioProb: ref(0.2),
-  errorProb: ref(0.1),
-  ioMinTime: ref(2),
+  computeProb: ref(0.9),
+  ioProb: ref(0.05),
+  errorProb: ref(0.05),
+  ioMinTime: ref(1),
   ioMaxTime: ref(4),
 };
 
@@ -105,7 +103,6 @@ const simulationConfig: SimulationConfig = {
 
 const config: AppConfig = {
   simulation: {
-    removeTerminatedAfterTicks: 10, // задержка удаления завершённых (тик)
     overheads: {
       loadTicks: 2,
       terminateTicks: 1,

@@ -8,7 +8,7 @@ import Process from "./Process";
 import ProcessTable from "./ProcessTable";
 import Scheduler from "./Scheduler";
 import SimulationEngine from "./SimulationEngine";
-import { systemConfig, SystemConfig } from "./config";
+import { systemConfig, SystemConfig, simulationConfig } from "./config";
 import appConfig from "./config";
 import { randomizeConfig } from "./rndConfig/randomize";
 
@@ -202,7 +202,7 @@ export default class OS {
     this.pendingRemoval.push({
       id: process.id,
       removeAt:
-        this.tickCounter + appConfig.simulation.removeTerminatedAfterTicks,
+        this.tickCounter + simulationConfig.removeTerminatedAfterTicks.value,
       size: process.memorySize,
     });
 
@@ -357,6 +357,51 @@ export default class OS {
 
       // Загружаем
       this.loadProcess(candidate);
+    }
+  }
+
+  public removeProcessByPid(pid: number): void {
+    const process = this.processTable.getProcess(pid);
+    if (!process) {
+      throw new Error(`Процесс с PID ${pid} не найден`);
+    }
+
+    const ovh = appConfig.simulation.overheads;
+    if (ovh) {
+      process.contextSwitchOverheadTicks =
+        (process.contextSwitchOverheadTicks || 0) + ovh.terminateTicks;
+      this.increaseReadyProcessesTime(ovh.terminateTicks);
+    }
+
+    this.cpu.clearProcess(process);
+
+    process.terminate();
+
+    process.setCurrentCommand(null);
+    process.endTick = this.tickCounter;
+
+    try {
+      this.scheduler.onProcessTerminated(process);
+    } catch (e) {
+      console.error(e);
+    }
+
+    try {
+      this.memoryManager.free(process.memorySize);
+    } catch (e) {
+      console.error(e);
+    }
+
+    this.pendingRemoval = this.pendingRemoval.filter((x) => x.id !== pid);
+
+    this.processTable.removeProcess(pid);
+
+    if (process.arrivalTick !== undefined) {
+      const turnaround = this.tickCounter - process.arrivalTick;
+      this.metrics.completedProcessesCount.value++;
+      this.metrics.sumTurnaround += turnaround;
+      this.metrics.sumWaiting += process.waitTicks;
+      this.metrics.sumService += process.runTicks;
     }
   }
 

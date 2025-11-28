@@ -3,21 +3,21 @@ import { inject, ref } from "vue";
 import OS from "../../core/OS";
 import Process from "../../core/Process";
 
-const os: OS | undefined = inject("os");
-const processes = os!.processTable.processes;
+const os: OS | undefined = inject("os")!;
+const processes = os.processTable.processes;
 
 const tab = ref<"main" | "analysis">("main");
 
 const loadProcess = () => {
-  os!.initialLoad();
+  os.initialLoad();
 };
 
 const addProcess = () => {
-  os!.loadProcess();
+  os.loadProcess();
 };
 
 const clearProcesses = () => {
-  os!.clearProcesses();
+  os.clearProcesses();
 };
 
 const getCommand = (process: Process): String => {
@@ -61,6 +61,7 @@ const getCommand = (process: Process): String => {
               <th>PriorityBase</th>
               <th>PriorityDyn</th>
               <th class="th_command">Command</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -84,6 +85,14 @@ const getCommand = (process: Process): String => {
               <td>{{ process.dynamicPriority }}</td>
               <td>
                 {{ process.state === "RUNNING" ? getCommand(process) : "-" }}
+              </td>
+              <td>
+                <button
+                  class="btn delete_btn"
+                  @click="() => os.removeProcessByPid(process.id)"
+                >
+                  ×
+                </button>
               </td>
             </tr>
           </tbody>
@@ -139,6 +148,7 @@ const getCommand = (process: Process): String => {
         </table>
       </div>
     </div>
+    <div class="process_settings_block"></div>
     <div class="buttons_group">
       <button type="button" class="btn" @click="loadProcess">fill table</button>
       <button type="button" class="btn" @click="addProcess">
@@ -242,5 +252,20 @@ const getCommand = (process: Process): String => {
 .buttons_group {
   display: flex;
   gap: 0.75rem;
+}
+
+.delete_btn {
+  color: var(--second-text);
+  font-size: 1rem;
+  display: flex;
+  justify-content: center;
+  align-items: center;
+  width: 18px;
+  height: 18px;
+}
+
+.delete_btn:hover {
+  color: var(--bad);
+  border-color: var(--bad);
 }
 </style>
