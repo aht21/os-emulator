@@ -3,21 +3,25 @@ import { inject, ref } from "vue";
 import OS from "../../core/OS";
 import Process from "../../core/Process";
 
-const os: OS | undefined = inject("os")!;
-const processes = os.processTable.processes;
+const os: OS | undefined = inject("os");
+const processes = os!.processTable.processes;
 
 const tab = ref<"main" | "analysis">("main");
 
 const loadProcess = () => {
-  os.initialLoad();
+  os!.initialLoad();
 };
 
 const addProcess = () => {
-  os.loadProcess();
+  os!.loadProcess();
 };
 
 const clearProcesses = () => {
-  os.clearProcesses();
+  os!.clearProcesses();
+};
+
+const removeProcess = (id: number) => {
+  os!.removeProcessByPid(id);
 };
 
 const getCommand = (process: Process): String => {
@@ -89,7 +93,7 @@ const getCommand = (process: Process): String => {
               <td>
                 <button
                   class="btn delete_btn"
-                  @click="() => os.removeProcessByPid(process.id)"
+                  @click="() => removeProcess(process.id)"
                 >
                   ×
                 </button>
@@ -109,8 +113,7 @@ const getCommand = (process: Process): String => {
               <th>IO</th>
               <th>OvhIO</th>
               <th>OvhCtx</th>
-              <th>Tm</th>
-              <th>Tt</th>
+              <th></th>
             </tr>
           </thead>
           <tbody>
@@ -141,8 +144,14 @@ const getCommand = (process: Process): String => {
                 }}
               </td>
               <td>{{ process.contextSwitchOverheadTicks }}</td>
-              <td>{{ process.T_mono ?? "-" }}</td>
-              <td>{{ process.T_multi ?? "-" }}</td>
+              <td>
+                <button
+                  class="btn delete_btn"
+                  @click="() => removeProcess(process.id)"
+                >
+                  ×
+                </button>
+              </td>
             </tr>
           </tbody>
         </table>

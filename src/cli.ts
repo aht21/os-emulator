@@ -1,27 +1,9 @@
 import readline from "readline";
 import OS from "./core/OS";
-import {
-  cpuConfig,
-  generatorConfig,
-  schedulerConfig,
-  systemConfig,
-} from "./core/config";
+import { cpuConfig, schedulerConfig, systemConfig } from "./core/config";
 
 const os = new OS();
-
-// Используем SetInterval<any> для TypeScript, если ReturnType<typeof setInterval> вызывает ошибку
-let psInterval: ReturnType<typeof setInterval> | null = null;
-
-function renderPS() {
-  console.clear();
-  console.log("Таблица процессов (автообновление)");
-  console.table(os.getPSWTable());
-  const activeProcesses = os.cpu.getAllActiveProcesses();
-  console.log(
-    `CPU: ${os.cpu.state} | Активных процессов: ${activeProcesses.length}/${os.cpu.maxThreads} | Активные PID: ${activeProcesses.map((p) => p.id).join(", ") || "-"}`,
-  );
-  console.log("Нажмите /ps ещё раз, чтобы остановить автообновление.");
-}
+let activeInterval: NodeJS.Timeout | null = null;
 
 const rl = readline.createInterface({
   input: process.stdin,
@@ -29,274 +11,246 @@ const rl = readline.createInterface({
   prompt: "os> ",
 });
 
-const helpText = `
-Доступные команды:
-/start   — запустить симуляцию
-/stop    — остановить симуляцию
-/gen     — сгенерировать новый процесс
-/init    — начальная загрузка (генерировать и загрузить пока хватает памяти)
-/ps      — список процессов
-/screen  — интерактивная индикация параметров системы
-/mem     — показать статистику памяти
-/analysis — разложение T_mono/T_multi по процессам
-/perf     — производительность vs. монорежим
-/reboot  — перезапустить ОС (очистить состояние)
-/exit    — выйти из программы
-/?       — показать эту справку
+function renderProcessTable() {
+  console.clear();
+  console.log("=== Таблица процессов (PSW) ===");
 
-Алгоритм планировщика: Относительные приоритеты
-- Каждый READY-процесс стареет: priority += agingStep (до maxPriority)
-- RUNNING получает штраф: priority -= runPenaltyStep (до minPriority)
-- Выбор: процесс с максимальным dynamicPriority
-- Квант: ${schedulerConfig.quantum.value} тактов; по исчерпании — возврат в READY
-`;
+  const processes = os.processTable.getProcesses();
+  const tableData = processes.map((p) => {
+    const cmdDesc = p.currentCommand ? p.currentCommand.type : "-";
+
+    return {
+      PID: p.id,
+      State: p.state,
+      PC: p.pc,
+      Pri: p.dynamicPriority,
+      Run: p.runTicks,
+      Wait: p.waitTicks,
+      Cmd: cmdDesc,
+    };
+  });
+
+  if (tableData.length === 0) {
+    console.log("Нет активных процессов.");
+  } else {
+    console.table(tableData);
+  }
+
+  const activeProcs = os.cpu.getAllActiveProcesses();
+  const activePids = activeProcs.map((p) => p.id).join(", ");
+
+  console.log(
+    `CPU State: [${os.cpu.state}] | Threads: ${activeProcs.length}/${os.cpu.threadCount} | Running PIDs: ${activePids || "None"}`,
+  );
+  console.log("\n(Нажмите /ps снова для остановки автообновления)");
+}
+
+function renderMemoryStats() {
+  const total = os.memoryManager.totalMemory.value;
+  const free = os.memoryManager.freeMemory.value;
+  const used = os.memoryManager.filledMemory.value;
+
+  console.log(`\n=== Memory Statistics ===`);
+  console.log(`Total: ${total}`);
+  console.log(`Used:  ${used}`);
+  console.log(`Free:  ${free}`);
+  console.log(`Usage: ${((used / total) * 100).toFixed(1)}%\n`);
+}
+
+function renderSystemScreen() {
+  console.clear();
+  console.log("=== Монитор параметров ОС ===\n");
+
+  const q = schedulerConfig.quantum.value;
+  const minP = schedulerConfig.minPriority.value;
+  const maxP = schedulerConfig.maxPriority.value;
+  console.log(
+    `Config: Mem=${systemConfig.totalMemory.value}, Threads=${cpuConfig.threadCount.value}, Quantum=${q}, Priority=[${minP}-${maxP}]`,
+  );
+
+  const totalTicks = os.metrics.totalTicks.value;
+  const completed = os.metrics.completedProcessesCount.value;
+  const cpuUtil =
+    totalTicks > 0
+      ? (os.metrics.busyThreadTicks /
+          (totalTicks * cpuConfig.threadCount.value)) *
+        100
+      : 0;
+
+  const throughput = totalTicks > 0 ? completed / totalTicks : 0;
+
+  console.log(`Metrics: Ticks=${totalTicks}, Completed=${completed}`);
+  console.log(`CPU Util: ${cpuUtil.toFixed(1)}%`);
+  console.log(`Throughput: ${throughput.toFixed(4)} proc/tick`);
+  console.log(
+    `Avg Ready Queue: ${(os.metrics.readyQueueSamples / (os.metrics.readyQueueSamplesCount || 1)).toFixed(2)}`,
+  );
+
+  console.log(`\nLast Executed PIDs: [${os.metrics.lastExecuted.join(", ")}]`);
+
+  console.log("\n-- Active Processes Snapshot --");
+  const briefTable = os.processTable
+    .getProcesses()
+    .map((p) => ({
+      ID: p.id,
+      St: p.state,
+      Pri: p.dynamicPriority,
+      Life: os.metrics.totalTicks.value - (p.arrivalTick || 0),
+    }))
+    .slice(0, 10);
+
+  console.table(briefTable);
+  if (os.processTable.getProcesses().length > 10)
+    console.log("... (displayed top 10)");
+}
+
+function renderPerformance() {
+  console.clear();
+  console.log("=== Анализ производительности ===");
+
+  const completedCount = os.metrics.completedProcessesCount.value;
+  const totalTicks = os.metrics.totalTicks.value;
+
+  const avgService =
+    os.metrics.completedProcessesCount.value > 0
+      ? os.metrics.sumService / os.metrics.completedProcessesCount.value
+      : 0;
+
+  console.log(`Total Ticks:      ${totalTicks}`);
+  console.log(`Completed Jobs:   ${completedCount}`);
+  console.log(`Avg Service Time: ${avgService.toFixed(2)} ticks`);
+
+  if (avgService > 0) {
+    const idealMonoThroughput = totalTicks / avgService;
+    const efficiency = (completedCount / idealMonoThroughput) * 100;
+    console.log(
+      `Ideal Mono Count: ${idealMonoThroughput.toFixed(2)} (Theoretical)`,
+    );
+    console.log(
+      `Efficiency ratio: ${efficiency.toFixed(1)}% (vs Serial execution)`,
+    );
+  } else {
+    console.log("Недостаточно данных для расчета эффективности.");
+  }
+}
+
+function stopAutoRefresh() {
+  if (activeInterval) {
+    clearInterval(activeInterval);
+    activeInterval = null;
+    console.log(">> Автообновление остановлено.");
+  }
+}
+
+function startAutoRefresh(callback: () => void, interval = 500) {
+  stopAutoRefresh();
+  callback(); // Сразу отрисовать первый кадр
+  activeInterval = setInterval(callback, interval);
+}
 
 console.log("OS Emulator (CLI mode)");
-console.log(helpText);
-
-rl.prompt();
+console.log("Введите /? для справки.");
 
 rl.on("line", (line) => {
-  const cmd = line.trim();
+  const cmd = line.trim().toLowerCase();
 
-  // Очистка интервала при смене режима
   if (
-    psInterval &&
-    cmd !== "/ps" &&
-    cmd !== "/screen" &&
-    cmd !== "/analysis" &&
-    cmd !== "/perf"
+    !["/ps", "/screen", "/perf", "/analysis"].includes(cmd) &&
+    activeInterval
   ) {
-    clearInterval(psInterval);
-    psInterval = null;
+    stopAutoRefresh();
   }
 
   switch (cmd) {
     case "/start":
       os.simEngine.start();
-      console.log("Симуляция запущена");
+      console.log("Симуляция запущена.");
       break;
 
     case "/stop":
       os.simEngine.stop();
-      console.log("Симуляция остановлена");
+      console.log("Симуляция остановлена.");
       break;
 
     case "/gen":
       try {
         const p = os.loadProcess();
-        console.log(`Процесс создан и загружен: PID=${p.id}`);
-      } catch (e) {
-        console.error("Ошибка генерации процесса:", e);
+        console.log(`[OK] Процесс PID=${p.id} создан и поставлен в очередь.`);
+      } catch (e: unknown) {
+        if (e instanceof Error) {
+          console.error(`[Error] Не удалось создать процесс: ${e.message}`);
+        } else {
+          console.error(`[Error] Неизвестная ошибка`, e);
+        }
       }
       break;
 
     case "/init":
       try {
         os.initialLoad();
-        console.log("Начальная загрузка завершена");
-      } catch (e) {
-        console.error("Ошибка начальной загрузки:", e);
+        console.log(
+          `[OK] Начальная загрузка выполнена. Процессов: ${os.processTable.getProcesses().length}`,
+        );
+      } catch (e: unknown) {
+        if (e instanceof Error) {
+          console.error(`[Error] ${e.message}`);
+        } else {
+          console.error(`[Error] Неизвестная ошибка`, e);
+        }
       }
       break;
 
     case "/ps":
-      if (psInterval) {
-        clearInterval(psInterval);
-        psInterval = null;
-        console.log("Автообновление таблицы процессов остановлено.");
-      } else {
-        renderPS();
-        psInterval = setInterval(renderPS, 500);
-      }
+      if (activeInterval) stopAutoRefresh();
+      else startAutoRefresh(renderProcessTable);
       break;
 
-    case "/screen": {
-      const renderScreen = () => {
-        console.clear();
-        console.log("Модель ОС — Индикация параметров\n");
-
-        // --- Получение данных ---
-        const active = os.cpu.getAllActiveProcesses();
-        const stats = os.getSystemParams();
-        // ---
-
-        // Постоянная информация
-        console.log(
-          "Постоянно: Алгоритм — Относительные приоритеты; Управление — /start, /stop, /ps, /screen, /mem, /?\n",
-        );
-        // Параметры системы
-        console.log(
-          `Система: Память=${systemConfig.totalMemory.value}, Таблица процессов=${systemConfig.maxProcesses.value}, Потоков ЦП=${cpuConfig.threadCount.value}`,
-        );
-        // Параметры генератора
-        const gen = generatorConfig;
-        console.log(
-          `Задание: Память[${gen.minMemory.value}-${gen.maxMemory.value}], Команды[${gen.minInstructions.value}-${gen.maxInstructions.value}]`,
-        );
-        // Параметры планировщика
-        const sch = schedulerConfig;
-        console.log(
-          `Планировщик: квант=${sch.quantum.value}, приоритет[${sch.minPriority.value}-${sch.maxPriority.value}], agingStep=${sch.agingStep.value}/${sch.agingIntervalTicks.value}, penalty=${sch.runPenaltyStep.value}`,
-        );
-        // Параметры CPU
-        console.log(
-          `CPU: состояние=${os.cpu.state}, активных=${active.length}/${os.cpu.maxThreads}, утилизация=${(stats.cpuUtilization * 100).toFixed(1)}%`,
-        );
-        // Последовательность
-        console.log(
-          `Последние процессы: ${stats.lastExecuted.join(", ") || "-"}`,
-        );
-        // Очереди/средние
-        // !!! ИСПРАВЛЕНО: Обращение к stats.completedCount через .value (если это реактивное свойство)
-        const completed = stats.completedProcessesCount
-          ? stats.completedProcessesCount.value
-          : stats.completedCount;
-        console.log(
-          `Очередь READY(avg)=${stats.avgReadyLen.toFixed(2)}, Выполнено=${completed}, AvgWait=${stats.avgWaiting.toFixed(2)}, AvgTurn=${stats.avgTurnaround.toFixed(2)}, Throughput=${stats.throughputPerTick.toFixed(3)} per tick\n`,
-        );
-        // Таблица процессов (все параметры на одном окне)
-        console.table(
-          os.processTable.getProcesses().map((p) => ({
-            PID: p.id,
-            State: p.state,
-            PC: p.pc,
-            PriBase: (p as any).basePriority,
-            PriDyn: (p as any).dynamicPriority,
-            Run: (p as any).runTicks,
-            Wait: (p as any).waitTicks,
-            Arr: (p as any).arrivalTick ?? "",
-            Start: (p as any).startTick ?? "",
-            End: (p as any).endTick ?? "",
-            Cmd: (p as any).getCurrentCommandDescription
-              ? (p as any).getCurrentCommandDescription()
-              : "",
-          })),
-        );
-      };
-      // Остановка предыдущего интервала, если он был
-      if (psInterval) clearInterval(psInterval);
-
-      renderScreen();
-      psInterval = setInterval(renderScreen, 500);
+    case "/screen":
+      if (activeInterval) stopAutoRefresh();
+      else startAutoRefresh(renderSystemScreen);
       break;
-    }
+
+    case "/perf":
+      if (activeInterval) stopAutoRefresh();
+      else startAutoRefresh(renderPerformance);
+      break;
 
     case "/mem":
-      const mem = os.getMemoryStats();
-      console.log(
-        `Память: total=${mem.total}, used=${mem.used}, free=${mem.free}`,
-      );
+      renderMemoryStats();
       break;
-
-    case "/analysis": {
-      const renderAnalysis = () => {
-        console.clear();
-        console.log(
-          "Анализ: компактная таблица T_mono/T_multi (повторный /analysis остановит автообновление)\n",
-        );
-        console.log(
-          [
-            "St: состояние",
-            "Instr: число команд",
-            "Run: отработанные тики",
-            "Wait: тики ожидания (READY)",
-            "IO: длительность I/O",
-            "OvhIO: инициализация I/O + ISR",
-            "OvhCtx: переключения контекста",
-            "Tm: T_mono",
-            "Tt: T_multi",
-          ].join(" | "),
-        );
-        console.log("");
-        const table = os.getTimeBreakdownTable();
-        const compact = table.map((r: any) => ({
-          PID: r.PID,
-          St: r.State,
-          Instr: r.totalInstructions,
-          Run: r.runTicks,
-          Wait: r.waitTicks,
-          IO: r.ioBusyTicks,
-          OvhIO: r.ioInitOverheadTicks + r.ioInterruptServiceTicks,
-          OvhCtx: r.contextSwitchOverheadTicks,
-          Tm: r.T_mono,
-          Tt: r.T_multi ?? "-",
-        }));
-        console.table(compact);
-      };
-      if (psInterval) {
-        clearInterval(psInterval);
-        psInterval = null;
-        console.log("Автообновление analysis остановлено.");
-      } else {
-        renderAnalysis();
-        psInterval = setInterval(renderAnalysis, 500);
-      }
-      break;
-    }
-
-    case "/perf": {
-      const renderPerf = () => {
-        console.clear();
-        console.log(
-          "Производительность (auto-refresh): /perf снова — остановка\n",
-        );
-        const perf = os.getMonoMultiMetrics();
-
-        // !!! ИСПРАВЛЕНО: Обращение к completedCount через .value
-        const completedCount = perf.completedProcessesCount
-          ? perf.completedProcessesCount.value
-          : perf.completedCount;
-
-        console.log(
-          `Ticks=${perf.totalTicks}, Completed=${completedCount}, Avg T_mono=${perf.avgTmono.toFixed(2)} такт.`,
-        );
-        console.log(
-          `Моно-возможные завершения: ${perf.monoPossibleCompleted.toFixed(2)}; Фактически завершено: ${completedCount}`,
-        );
-        console.log(
-          `Производительность (к мультипрограммированию): ${perf.performancePercent.toFixed(1)}%`,
-        );
-        if (perf.details && perf.details.length > 0) {
-          const head = perf.details.slice(-5);
-          console.log("Последние процессы (до 5):");
-          console.table(head);
-        }
-      };
-      if (psInterval) {
-        clearInterval(psInterval);
-        psInterval = null;
-        console.log("Автообновление perf остановлено.");
-      } else {
-        renderPerf();
-        psInterval = setInterval(renderPerf, 500);
-      }
-      break;
-    }
 
     case "/reboot":
+      os.simEngine.stop();
       os.simEngine.reboot();
-      console.log("ОС перезапущена");
+      console.log("Система перезагружена. Память очищена.");
       break;
 
     case "/exit":
       rl.close();
+      process.exit(0);
       break;
 
     case "/?":
-      console.log(helpText);
+    case "/help":
+      console.log(`
+Commands:
+  /start    - Запуск симуляции
+  /stop     - Пауза
+  /gen      - Создать один случайный процесс
+  /init     - Заполнить память процессами (Initial Load)
+  /ps       - Таблица процессов (вкл/выкл автообновление)
+  /screen   - Общий монитор ресурсов (вкл/выкл)
+  /mem      - Статистика памяти
+  /perf     - Оценка производительности
+  /reboot   - Сброс системы
+  /exit     - Выход
+      `);
       break;
 
     default:
-      console.log(
-        "Неизвестная команда:",
-        cmd,
-        "\nВведите /? для списка команд",
-      );
+      if (cmd !== "")
+        console.log("Неизвестная команда. Введите /? для справки.");
   }
 
   rl.prompt();
-}).on("close", () => {
-  console.log("Завершение работы CLI");
-  process.exit(0);
 });

@@ -24,8 +24,8 @@ const jobGenerator = inject<OS>("os")!.jobGenerator;
           :label-hidden="true"
           v-model="jobGenerator.maxMemory.value"
         />
+        <span class="units">bytes</span>
       </div>
-      <span class="units">bytes</span>
     </div>
     <div class="input_block">
       <span class="input_header">Used instructions:</span>
@@ -55,16 +55,18 @@ const jobGenerator = inject<OS>("os")!.jobGenerator;
   font-size: 0.875rem;
   height: 100%;
   position: relative;
-  gap: 0.5rem;
+  gap: 1rem;
 }
 
 .input_block {
   display: flex;
+  flex-direction: column;
   gap: 0.5rem;
 }
 
 .units {
   font-size: 0.75rem;
   color: var(--second-text);
+  margin-left: 0.5rem;
 }
 </style>

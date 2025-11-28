@@ -1,4 +1,5 @@
 import CPU from "./CPU.js";
+import Command from "./Command";
 import CommandGenerator from "./CommandGenerator";
 import IOProcessor from "./IOProcessor";
 import JobGenerator from "./JobGenerator";
@@ -8,7 +9,7 @@ import Process from "./Process";
 import ProcessTable from "./ProcessTable";
 import Scheduler from "./Scheduler";
 import SimulationEngine from "./SimulationEngine";
-import { systemConfig, SystemConfig, simulationConfig } from "./config";
+import { systemConfig, simulationConfig } from "./config";
 import appConfig from "./config";
 import { randomizeConfig } from "./rndConfig/randomize";
 
@@ -18,7 +19,6 @@ export default class OS {
   cpu!: CPU;
   simEngine!: SimulationEngine;
   jobGenerator!: JobGenerator;
-  config: SystemConfig;
   scheduler!: Scheduler;
   commandGenerator!: CommandGenerator;
   ioProcessor!: IOProcessor;
@@ -31,12 +31,11 @@ export default class OS {
   metrics!: Metrics;
 
   constructor() {
-    this.config = systemConfig;
     this.initialize();
   }
 
   initialize() {
-    this.processTable = new ProcessTable(this.config.maxProcesses.value);
+    this.processTable = new ProcessTable(systemConfig.maxProcesses.value);
     this.memoryManager = new MemoryManager();
     this.cpu = new CPU();
     this.simEngine = new SimulationEngine(this);
@@ -49,22 +48,15 @@ export default class OS {
     this.metrics = new Metrics();
   }
 
-  /**
-   * ГЛАВНЫЙ ЦИКЛ СИМУЛЯЦИИ
-   */
   tick() {
     this.tickCounter += 1;
     this.metrics.totalTicks.value += 1;
 
-    // 1. Работа CPU: получаем список процессов, находящихся на исполнении
     const activeProcesses = this.cpu.getAllActiveProcesses();
 
-    // Сначала выполняем такт CPU (инкремент счетчиков квантов и времени исполнения)
-    // Это важно сделать ДО проверки isQuantumExpired, чтобы учесть текущий тик.
     this.cpu.tick();
     this.metrics.busyThreadTicks += activeProcesses.length;
 
-    // Сбор последовательности PID для UI
     if (activeProcesses.length > 0) {
       for (const p of activeProcesses) {
         this.metrics.lastExecuted.push(p.id);
@@ -74,28 +66,22 @@ export default class OS {
       }
     }
 
-    // Обработка активных процессов
-    // Используем обратный цикл или копию массива, так как процессы могут быть удалены из CPU внутри цикла
     [...activeProcesses].forEach((process) => {
-      // Инициализация времени старта
       if (process.startTick === undefined) process.startTick = this.tickCounter;
 
-      // А. Генерация команды
       if (!process.currentCommand) {
         const cmd = this.commandGenerator.generateCommand(process);
         process.setCurrentCommand(cmd);
       }
 
       const cmd = process.currentCommand;
-      let processEvicted = false; // Флаг, что процесс ушел с CPU (IO, Exit, Quantum)
-
-      // Б. Исполнение команды
+      let processEvicted = false;
       if (cmd) {
         if (cmd.type === "COMPUTE") {
           cmd.execute(process.memory);
-          // !!! ВАЖНО: Сбрасываем команду после выполнения, чтобы на след. такте получить новую
           process.setCurrentCommand(null);
         } else if (cmd.type === "IO") {
+          console.log(cmd);
           this.handleIoRequest(process, cmd);
           processEvicted = true;
         } else if (cmd.type === "EXIT" || cmd.type === "ERROR") {
@@ -104,7 +90,6 @@ export default class OS {
         }
       }
 
-      // В. Проверка прерываний (если процесс всё еще на CPU)
       if (!processEvicted) {
         if (process.isTerminated()) {
           this.handleProcessTerminated(process);
@@ -114,27 +99,17 @@ export default class OS {
       }
     });
 
-    // 2. Старение очереди готовности (повышение приоритетов ожидающих)
     this.scheduler.tickAging();
-
-    // 3. Обработка I/O (возврат процессов в очередь готовности)
     const completedIO = this.ioProcessor.tick();
     for (const item of completedIO) {
       this.handleIoComplete(item.process);
     }
-
-    // 4. Планировщик: заполнение освободившихся потоков CPU
     this.scheduleReadyProcesses();
-
-    // 5. Метрики и очистка
     this.updateMetrics();
     this.processPendingRemovals();
   }
 
-  // === ОБРАБОТЧИКИ ПРЕРЫВАНИЙ И СМЕНЫ СОСТОЯНИЙ ===
-
-  private handleIoRequest(process: Process, cmd: any) {
-    // Накладные расходы
+  private handleIoRequest(process: Process, cmd: Command) {
     const ovh = appConfig.simulation.overheads;
     if (ovh) {
       process.contextSwitchOverheadTicks =
@@ -148,10 +123,9 @@ export default class OS {
       process.ioBusyTicks = (process.ioBusyTicks || 0) + cmd.executionTime;
     }
 
-    // Логика переключения
-    process.setCurrentCommand(null); // Очищаем команду IO, она передана процессору
-    this.cpu.clearProcess(process); // Убираем с CPU
-    process.state = "BLOCKED_IO"; // Явно ставим состояние (или через сеттер)
+    process.setCurrentCommand(null);
+    this.cpu.clearProcess(process);
+    process.state = "BLOCKED_IO";
     this.ioProcessor.submitIO(process, cmd);
   }
 
@@ -166,7 +140,6 @@ export default class OS {
         ovh.ioInterruptServiceTicks + ovh.ctxBlockedToReady,
       );
     }
-    // Возвращаем в планировщик
     this.scheduler.onProcessReady(process);
   }
 
@@ -191,14 +164,11 @@ export default class OS {
     }
 
     this.cpu.clearProcess(process);
-    process.terminate(); // Устанавливаем состояние TERMINATED
+    process.terminate();
     process.setCurrentCommand(null);
     process.endTick = this.tickCounter;
-
-    // Удаляем из очередей планировщика, если он там был (на всякий случай)
     this.scheduler.onProcessTerminated(process);
 
-    // Добавляем в очередь на физическое удаление из памяти
     this.pendingRemoval.push({
       id: process.id,
       removeAt:
@@ -206,7 +176,6 @@ export default class OS {
       size: process.memorySize,
     });
 
-    // Финальные метрики процесса
     if (process.arrivalTick !== undefined) {
       const turnaround = this.tickCounter - process.arrivalTick;
       this.metrics.completedProcessesCount.value++;
@@ -217,7 +186,6 @@ export default class OS {
   }
 
   private scheduleReadyProcesses() {
-    // Пока есть свободные ядра и есть процессы в очереди
     while (this.cpu.hasFreeThreads()) {
       const next = this.scheduler.getNextProcessForCPU();
       if (!next) break;
@@ -228,21 +196,10 @@ export default class OS {
           (next.contextSwitchOverheadTicks || 0) + ovh.ctxReadyToActive;
         this.increaseReadyProcessesTime(ovh.ctxReadyToActive);
       }
-
-      // !!! ВАЖНО: Переводим в состояние RUNNING
-      // Предполагаем, что у Process есть метод setRunning() или изменяем свойство напрямую
-      // Если оставить setReady(), метрики и логика CPU могут сломаться
-      if (typeof (next as any).setRunning === "function") {
-        (next as any).setRunning();
-      } else {
-        next.state = "RUNNING";
-      }
-
+      next.state = "RUNNING";
       this.cpu.setProcess(next);
     }
   }
-
-  // === ВСПОМОГАТЕЛЬНЫЕ МЕТОДЫ ===
 
   increaseReadyProcessesTime(ticks: number) {
     if (ticks <= 0) return;
@@ -300,17 +257,6 @@ export default class OS {
     }
   }
 
-  // === PUBLICS (для UI) ===
-  // (Оставляем методы getSystemParams, getMonoMultiMetrics и т.д. без изменений,
-  // они выглядят корректно, если данные собираются правильно)
-
-  getSystemParams() {
-    // ... (Ваш код метрик)
-    // Для краткости не дублирую, так как логика там не влияет на ход симуляции
-    return super.getSystemParams ? super.getSystemParams() : this.metrics; // Заглушка
-  }
-
-  // Методы loadProcess и generateJob оставляем без изменений
   generateJob(): Process {
     return this.jobGenerator.generateProcess();
   }
@@ -323,44 +269,29 @@ export default class OS {
       throw new Error("Недостаточно памяти!");
 
     this.memoryManager.allocate(process.memorySize);
-
-    // Сразу отправляем в планировщик
     this.scheduler.onProcessReady(process);
-
     this.processTable.addProcess(process);
     process.arrivalTick = this.tickCounter;
+
     return process;
   }
 
   initialLoad() {
-    // safetyLimit нужен, чтобы не уйти в бесконечный цикл,
-    // если генератор выдает слишком большие процессы, которые не лезут в память
-    const safetyLimit = this.config.maxProcesses.value * 10;
+    const safetyLimit = systemConfig.maxProcesses.value * 10;
     let attempts = 0;
 
     while (attempts < safetyLimit) {
       attempts++;
 
-      // Если таблица полна — хватит
       if (!this.processTable.hasSpace()) break;
-
-      // Генерируем кандидата
       const candidate = this.generateJob();
 
-      // Если нет места в памяти под этот конкретный процесс — пробуем следующий (continue)
-      // или прерываемся (break).
-      // Обычно break логичнее, если память фрагментирована или почти полна.
-      if (!this.memoryManager.hasSpace(candidate.memorySize)) {
-        // Можно попробовать break, считая что память кончилась
-        break;
-      }
-
-      // Загружаем
+      if (!this.memoryManager.hasSpace(candidate.memorySize)) break;
       this.loadProcess(candidate);
     }
   }
 
-  public removeProcessByPid(pid: number): void {
+  removeProcessByPid(pid: number): void {
     const process = this.processTable.getProcess(pid);
     if (!process) {
       throw new Error(`Процесс с PID ${pid} не найден`);
@@ -374,26 +305,13 @@ export default class OS {
     }
 
     this.cpu.clearProcess(process);
-
     process.terminate();
-
     process.setCurrentCommand(null);
     process.endTick = this.tickCounter;
 
-    try {
-      this.scheduler.onProcessTerminated(process);
-    } catch (e) {
-      console.error(e);
-    }
-
-    try {
-      this.memoryManager.free(process.memorySize);
-    } catch (e) {
-      console.error(e);
-    }
-
+    this.scheduler.onProcessTerminated(process);
+    this.memoryManager.free(process.memorySize);
     this.pendingRemoval = this.pendingRemoval.filter((x) => x.id !== pid);
-
     this.processTable.removeProcess(pid);
 
     if (process.arrivalTick !== undefined) {

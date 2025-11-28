@@ -132,8 +132,4 @@ export default class Process {
   setCurrentCommand(cmd: Command | null) {
     this.currentCommand = cmd;
   }
-
-  getCurrentCommandDescription(): string {
-    return this.currentCommand ? this.currentCommand.getDescription() : "";
-  }
 }
