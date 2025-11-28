@@ -37,6 +37,8 @@ const props = defineProps({
   width: 3rem;
   border: 1px solid var(--border);
   padding: 0.1rem 0.2rem;
+  background-color: var(--bg);
+  color: var(--text);
 }
 
 .number_input:hover {
