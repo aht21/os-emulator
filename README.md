@@ -1,17 +1,17 @@
 # os emulator
 
-Приложение, эмулирующее работу процессов в операционной системе.
+An application that emulates the operation of processes in the operating system.
 
 ![Preview](assets/preview.png)
 
-Запуск проекта в режиме ui:
+Launching app in ui mode:
 
 ```
 npm install
 npm run dev
 ```
 
-Запуск проекта в консольном режиме:
+Launching app in console mode:
 
 ```
 npm install
