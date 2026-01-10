@@ -2,6 +2,10 @@
 const model = defineModel({ required: true });
 
 const props = defineProps({
+  id: {
+    type: String,
+    required: true,
+  },
   label: {
     type: String,
     required: true,
@@ -31,14 +35,14 @@ const props = defineProps({
 
 <template>
   <div class="range_input_wrapper">
-    <label for="core_count">
+    <label :for="props.id">
       {{ props.label }} {{ model }}
       <span class="units"> {{ props.units }}</span>
     </label>
     <input
       class="range_input"
       type="range"
-      id="core_count"
+      :id="props.id"
       :min="props.min"
       :max="props.max"
       :step="props.step"
@@ -68,15 +72,23 @@ const props = defineProps({
   height: 2px;
   background-color: var(--border);
   cursor: pointer;
+  border: 1px solid var(--bg);
+}
+
+.range_input:hover {
+  border: 1px solid var(--text);
 }
 
 .range_input::-webkit-slider-thumb {
   -webkit-appearance: none;
   width: 8px;
   height: 18px;
-  border: none;
   background: var(--second-text);
-  transition: 300ms;
+  border: 1px solid var(--bg);
+}
+
+.range_input:hover::-webkit-slider-thumb {
+  border: 1px solid var(--text);
 }
 
 .range_input::-moz-range-thumb {
@@ -87,6 +99,12 @@ const props = defineProps({
   background: var(--second-text);
   transition: 300ms;
 }
+
+.range_input_wrapper label:hover + .range_input,
+.range_input_wrapper label:hover + .range_input::-webkit-slider-thumb {
+  border-color: var(--bg);
+}
+
 
 .minimum {
   font-size: 0.75rem;

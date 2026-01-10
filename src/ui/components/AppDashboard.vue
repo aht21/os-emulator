@@ -39,7 +39,7 @@ import WidgetSimulation from "./WidgetSimulation.vue";
     "simulation cpu process_table process_table"
     "memory memory process_table process_table"
     "performance performance performance process_generator";
-  padding: 2rem 0;
+  padding: 0 0 2rem 0;
   grid-template-columns: repeat(4, 1fr);
   grid-template-rows: 7fr 6fr 5fr;
   gap: 2rem;

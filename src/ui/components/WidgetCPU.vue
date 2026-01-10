@@ -15,6 +15,7 @@ const cpu = inject<OS>("os")!.cpu;
       </span>
     </span>
     <BaseInputRange
+      id="core_count"
       label="Core count:"
       :min="1"
       :max="8"
@@ -22,6 +23,7 @@ const cpu = inject<OS>("os")!.cpu;
       v-model="cpu.threadCount.value"
     />
     <BaseInputRange
+      id="speed"
       label="Speed:"
       :min="1"
       :max="80"

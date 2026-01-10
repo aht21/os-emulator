@@ -35,6 +35,7 @@ const filledBars = computed(() => {
       </div>
       <BaseInputRange
         class="memory_range"
+        id="total"
         label="Total:"
         :min="16"
         :max="1024"
@@ -86,7 +87,9 @@ const filledBars = computed(() => {
 }
 
 .diagram {
-  height: 60px;
+  height: 100%;
+  min-height: 40px;
+  max-height: 100px;
   position: relative;
   display: flex;
   justify-content: space-between;
