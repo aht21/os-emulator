@@ -93,6 +93,7 @@ const props = defineProps({
 
 .range_input::-moz-range-thumb {
   -webkit-appearance: none;
+  appearance: none;
   width: 8px;
   height: 18px;
   border: none;
@@ -104,7 +105,6 @@ const props = defineProps({
 .range_input_wrapper label:hover + .range_input::-webkit-slider-thumb {
   border-color: var(--bg);
 }
-
 
 .minimum {
   font-size: 0.75rem;

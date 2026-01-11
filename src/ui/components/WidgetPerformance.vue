@@ -17,7 +17,10 @@ const metrics = inject<OS>("os")!.metrics;
         Blocked avg: {{ metrics.avgBlockedTicks }}
         <span class="units"> ticks</span>
       </span>
-      <span>Completed: {{ metrics.completedProcessesCount }}</span>
+      <span>
+        Completed: {{ metrics.completedProcessesCount }}
+        <span class="units"> processes</span>
+      </span>
     </div>
   </div>
 </template>

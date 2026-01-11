@@ -1,10 +1,12 @@
+<script setup lang="ts">
+import InfoModal from "./InfoModal.vue";
+</script>
+
 <template>
   <div class="container">
     <div class="navbar_inner">
       <span>os emulator</span>
-      <button class="btn">
-        info
-      </button>
+      <InfoModal />
     </div>
   </div>
 </template>
@@ -14,6 +16,6 @@
   display: flex;
   justify-content: space-between;
   align-items: center;
-  height: 56px;
+  height: 48px;
 }
 </style>

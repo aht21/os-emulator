@@ -95,7 +95,16 @@ const getCommand = (process: Process): String => {
                   class="btn delete_btn"
                   @click="() => removeProcess(process.id)"
                 >
-                  ×
+                  <svg
+                    class="icon"
+                    viewBox="0 0 21 21"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="currentColor"
+                  >
+                    <polygon
+                      points="12.0183 10.5 21 19.054 19.48065 20.5 10.5 11.946 1.5183 20.5 0 19.054 8.98065 10.5 0 1.946 1.5183 0.5 10.5 9.054 19.48065 0.5 21 1.946"
+                    />
+                  </svg>
                 </button>
               </td>
             </tr>
@@ -149,7 +158,16 @@ const getCommand = (process: Process): String => {
                   class="btn delete_btn"
                   @click="() => removeProcess(process.id)"
                 >
-                  ×
+                  <svg
+                    class="icon"
+                    viewBox="0 0 21 21"
+                    xmlns="http://www.w3.org/2000/svg"
+                    fill="currentColor"
+                  >
+                    <polygon
+                      points="12.0183 10.5 21 19.054 19.48065 20.5 10.5 11.946 1.5183 20.5 0 19.054 8.98065 10.5 0 1.946 1.5183 0.5 10.5 9.054 19.48065 0.5 21 1.946"
+                    />
+                  </svg>
                 </button>
               </td>
             </tr>
@@ -265,16 +283,21 @@ const getCommand = (process: Process): String => {
 
 .delete_btn {
   color: var(--second-text);
-  font-size: 1rem;
   display: flex;
   justify-content: center;
   align-items: center;
   width: 18px;
   height: 18px;
+  padding: 0;
 }
 
 .delete_btn:hover {
   color: var(--bad);
   border-color: var(--bad);
+}
+
+.icon {
+  width: 0.85rem;
+  height: 0.85rem;
 }
 </style>

@@ -1,22 +1,24 @@
-@import url('https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap');
+@import url("https://fonts.googleapis.com/css2?family=IBM+Plex+Mono:ital,wght@0,100;0,200;0,300;0,400;0,500;0,600;0,700;1,100;1,200;1,300;1,400;1,500;1,600;1,700&display=swap");
 
 :root {
+  color-scheme: light;
   --bg: #ffffff;
-  --border: #E0E0E0;
+  --border: #e0e0e0;
   --text: #222222;
   --second-text: #797979;
-  --good: #7ABC00;
-  --bad: #EA382C;
+  --good: #7abc00;
+  --bad: #ea382c;
 }
 
 @media screen and (prefers-color-scheme: dark) {
   :root {
+    color-scheme: dark;
     --bg: #191919;
     --border: #383838;
     --text: #f2f2f2;
     --second-text: #797979;
-    --good: #CCF67D;
-    --bad: #F17C74;
+    --good: #ccf67d;
+    --bad: #f17c74;
   }
 }
 
@@ -66,3 +68,55 @@ body {
   color: var(--second-text);
 }
 
+.corner_border {
+  --corner: var(--second-text);
+  --line: var(--border);
+  --w: 1px;
+  --l: 16px;
+  --gap: 8px;
+
+  background:
+    /* corners */
+    linear-gradient(var(--corner), var(--corner)) left top,
+    linear-gradient(var(--corner), var(--corner)) left top,
+    linear-gradient(var(--corner), var(--corner)) right top,
+    linear-gradient(var(--corner), var(--corner)) right top,
+    linear-gradient(var(--corner), var(--corner)) left bottom,
+    linear-gradient(var(--corner), var(--corner)) left bottom,
+    linear-gradient(var(--corner), var(--corner)) right bottom,
+    linear-gradient(var(--corner), var(--corner)) right bottom,
+    /* top line */ linear-gradient(var(--line), var(--line)) top center,
+    /* bottom line */ linear-gradient(var(--line), var(--line)) bottom center,
+    /* left line */ linear-gradient(var(--line), var(--line)) center left,
+    /* right line */ linear-gradient(var(--line), var(--line)) center right;
+
+  background-size:
+    var(--l) var(--w),
+    var(--w) var(--l),
+    var(--l) var(--w),
+    var(--w) var(--l),
+    var(--l) var(--w),
+    var(--w) var(--l),
+    var(--l) var(--w),
+    var(--w) var(--l),
+    calc(100% - (var(--l) * 2) - (var(--gap) * 2)) var(--w),
+    calc(100% - (var(--l) * 2) - (var(--gap) * 2)) var(--w),
+    var(--w) calc(100% - (var(--l) * 2) - (var(--gap) * 2)),
+    var(--w) calc(100% - (var(--l) * 2) - (var(--gap) * 2));
+
+  background-repeat: no-repeat;
+
+  background-position:
+    left top,
+    left top,
+    right top,
+    right top,
+    left bottom,
+    left bottom,
+    right bottom,
+    right bottom,
+    center top,
+    center bottom,
+    left center,
+    right center;
+}
